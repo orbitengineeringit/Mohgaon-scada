@@ -9,10 +9,16 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TrendsRouteImport } from './routes/trends'
 import { Route as ReservoirsRouteImport } from './routes/reservoirs'
 import { Route as PumpsRouteImport } from './routes/pumps'
 import { Route as IndexRouteImport } from './routes/index'
 
+const TrendsRoute = TrendsRouteImport.update({
+  id: '/trends',
+  path: '/trends',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ReservoirsRoute = ReservoirsRouteImport.update({
   id: '/reservoirs',
   path: '/reservoirs',
@@ -33,34 +39,45 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/pumps': typeof PumpsRoute
   '/reservoirs': typeof ReservoirsRoute
+  '/trends': typeof TrendsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/pumps': typeof PumpsRoute
   '/reservoirs': typeof ReservoirsRoute
+  '/trends': typeof TrendsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/pumps': typeof PumpsRoute
   '/reservoirs': typeof ReservoirsRoute
+  '/trends': typeof TrendsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/pumps' | '/reservoirs'
+  fullPaths: '/' | '/pumps' | '/reservoirs' | '/trends'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/pumps' | '/reservoirs'
-  id: '__root__' | '/' | '/pumps' | '/reservoirs'
+  to: '/' | '/pumps' | '/reservoirs' | '/trends'
+  id: '__root__' | '/' | '/pumps' | '/reservoirs' | '/trends'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   PumpsRoute: typeof PumpsRoute
   ReservoirsRoute: typeof ReservoirsRoute
+  TrendsRoute: typeof TrendsRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/trends': {
+      id: '/trends'
+      path: '/trends'
+      fullPath: '/trends'
+      preLoaderRoute: typeof TrendsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reservoirs': {
       id: '/reservoirs'
       path: '/reservoirs'
@@ -89,6 +106,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   PumpsRoute: PumpsRoute,
   ReservoirsRoute: ReservoirsRoute,
+  TrendsRoute: TrendsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

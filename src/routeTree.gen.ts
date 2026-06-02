@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as TrendsRouteImport } from './routes/trends'
 import { Route as ReservoirsRouteImport } from './routes/reservoirs'
 import { Route as PumpsRouteImport } from './routes/pumps'
+import { Route as AlarmsRouteImport } from './routes/alarms'
 import { Route as IndexRouteImport } from './routes/index'
 
 const TrendsRoute = TrendsRouteImport.update({
@@ -29,6 +30,11 @@ const PumpsRoute = PumpsRouteImport.update({
   path: '/pumps',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AlarmsRoute = AlarmsRouteImport.update({
+  id: '/alarms',
+  path: '/alarms',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -37,12 +43,14 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/alarms': typeof AlarmsRoute
   '/pumps': typeof PumpsRoute
   '/reservoirs': typeof ReservoirsRoute
   '/trends': typeof TrendsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/alarms': typeof AlarmsRoute
   '/pumps': typeof PumpsRoute
   '/reservoirs': typeof ReservoirsRoute
   '/trends': typeof TrendsRoute
@@ -50,20 +58,22 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/alarms': typeof AlarmsRoute
   '/pumps': typeof PumpsRoute
   '/reservoirs': typeof ReservoirsRoute
   '/trends': typeof TrendsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/pumps' | '/reservoirs' | '/trends'
+  fullPaths: '/' | '/alarms' | '/pumps' | '/reservoirs' | '/trends'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/pumps' | '/reservoirs' | '/trends'
-  id: '__root__' | '/' | '/pumps' | '/reservoirs' | '/trends'
+  to: '/' | '/alarms' | '/pumps' | '/reservoirs' | '/trends'
+  id: '__root__' | '/' | '/alarms' | '/pumps' | '/reservoirs' | '/trends'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AlarmsRoute: typeof AlarmsRoute
   PumpsRoute: typeof PumpsRoute
   ReservoirsRoute: typeof ReservoirsRoute
   TrendsRoute: typeof TrendsRoute
@@ -92,6 +102,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PumpsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/alarms': {
+      id: '/alarms'
+      path: '/alarms'
+      fullPath: '/alarms'
+      preLoaderRoute: typeof AlarmsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -104,6 +121,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AlarmsRoute: AlarmsRoute,
   PumpsRoute: PumpsRoute,
   ReservoirsRoute: ReservoirsRoute,
   TrendsRoute: TrendsRoute,

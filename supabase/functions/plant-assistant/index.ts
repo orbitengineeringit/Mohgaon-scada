@@ -80,35 +80,25 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // === DAILY QUOTA — 4 user messages per day, admins bypass ===
+    // === DAILY QUOTA — 4 user messages per 24h, applies to ALL users (including admin) ===
     const DAILY_LIMIT = 4;
-    const { data: isAdmin } = await supabase.rpc("has_role", {
-      _user_id: userId, _role: "admin",
-    });
-
-    let used = 0;
-    let remaining = DAILY_LIMIT;
-    if (!isAdmin) {
-      const startOfDay = new Date();
-      startOfDay.setHours(0, 0, 0, 0);
-      const { count } = await supabase
-        .from("chat_messages")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", userId)
-        .eq("role", "user")
-        .gte("created_at", startOfDay.toISOString());
-      used = count ?? 0;
-      remaining = Math.max(0, DAILY_LIMIT - used);
-      if (used >= DAILY_LIMIT) {
-        return new Response(JSON.stringify({
-          error: `Daily limit reached (${DAILY_LIMIT}/day). Try again tomorrow.`,
-          quota: { used, remaining: 0, limit: DAILY_LIMIT, reset: "midnight" },
-        }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-    } else {
-      remaining = -1; // unlimited marker
+    // Rolling 24-hour window
+    const windowStart = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const { count } = await supabase
+      .from("chat_messages")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("role", "user")
+      .gte("created_at", windowStart.toISOString());
+    const used = count ?? 0;
+    const remaining = Math.max(0, DAILY_LIMIT - used);
+    if (used >= DAILY_LIMIT) {
+      return new Response(JSON.stringify({
+        error: `Daily limit reached (${DAILY_LIMIT} questions per 24 hours). Please try again later.`,
+        quota: { used, remaining: 0, limit: DAILY_LIMIT, reset: "24h rolling" },
+      }), {
+        status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const body: RequestBody = await req.json();
@@ -241,8 +231,8 @@ Deno.serve(async (req) => {
     }
 
     // Add quota info to response headers (count this request as used since it passed quota check)
-    const newUsed = isAdmin ? 0 : used + 1;
-    const newRemaining = isAdmin ? -1 : Math.max(0, DAILY_LIMIT - newUsed);
+    const newUsed = used + 1;
+    const newRemaining = Math.max(0, DAILY_LIMIT - newUsed);
 
     return new Response(aiResponse.body, {
       headers: {

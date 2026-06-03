@@ -127,6 +127,18 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
     try {
       const parsed = JSON.parse(payload);
       if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+        // Handle {TAG: "NAME", VALUE: x} shape (Bua Bicchiya broker format)
+        const keys = Object.keys(parsed);
+        const hasTag = keys.some(k => k.toUpperCase() === 'TAG');
+        const hasVal = keys.some(k => k.toUpperCase() === 'VALUE');
+        if (hasTag && hasVal && keys.length <= 3) {
+          const tagKey = keys.find(k => k.toUpperCase() === 'TAG')!;
+          const valKey = keys.find(k => k.toUpperCase() === 'VALUE')!;
+          const tagName = String(parsed[tagKey]);
+          const val = parsed[valKey];
+          results.push({ [tagName]: typeof val === 'object' && val !== null && 'value' in val ? (val as any).value : val });
+          return results;
+        }
         Object.entries(parsed).forEach(([key, value]) => {
           if (typeof value === 'object' && value !== null && 'value' in value) {
             results.push({ [key]: (value as { value: number | string }).value });

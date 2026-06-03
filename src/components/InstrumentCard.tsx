@@ -181,18 +181,23 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
   }, [connectionStatus, tag.source, tag.value, isDigital, isTotalizer]);
 
   const getHealthBadge = () => {
-    if (tag.source !== 'mqtt') return null;
-    const badges: Record<string, { label: string; className: string }> = {
-      'healthy': { label: isDigital ? (tag.value > 0.5 ? 'ON' : 'OFF') : 'LIVE', className: isDigital ? (tag.value > 0.5 ? 'bg-success/15 text-success' : 'bg-muted text-muted-foreground') : 'bg-success/15 text-success' },
-      'zero-reading': { label: 'ZERO', className: 'bg-warning/15 text-warning' },
-      'standby': { label: 'WAIT', className: 'bg-warning/15 text-warning' },
-      'offline': { label: 'OFF', className: 'bg-destructive/15 text-destructive' },
-      'unknown': { label: '—', className: 'bg-muted text-muted-foreground' },
-    };
-    const badge = badges[instrumentHealth] || badges['unknown'];
+    // Always show an ON/OFF status so operators know if data is flowing,
+    // regardless of whether the value is zero or the tag source is mqtt/sim.
+    let label: string;
+    let className: string;
+    if (connectionStatus === 'connected') {
+      label = 'ON';
+      className = 'bg-success/15 text-success border border-success/30';
+    } else if (connectionStatus === 'standby') {
+      label = 'WAIT';
+      className = 'bg-warning/15 text-warning border border-warning/30';
+    } else {
+      label = 'OFF';
+      className = 'bg-destructive/15 text-destructive border border-destructive/30 animate-pulse';
+    }
     return (
-      <span className={`text-[8px] sm:text-[9px] font-bold px-1.5 py-0.5 rounded-md ${badge.className}`}>
-        {badge.label}
+      <span className={`text-[8px] sm:text-[9px] font-bold px-1.5 py-0.5 rounded-md tracking-wider ${className}`}>
+        {label}
       </span>
     );
   };

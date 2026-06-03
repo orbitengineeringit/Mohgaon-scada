@@ -1,0 +1,132 @@
+import React from 'react';
+import { Button } from '@/components/ui/button';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { CalendarIcon, Filter } from 'lucide-react';
+import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
+
+export type AssetFilter = 'all' | 'intake' | 'wtp' | 'oht-1' | 'oht-2' | 'oht-3';
+export type DensityFilter = 'fast' | 'detailed' | 'analytical';
+
+export interface GlobalFilters {
+  startDate: Date | undefined;
+  endDate: Date | undefined;
+  assets: AssetFilter[];
+  density: DensityFilter;
+}
+
+interface GlobalFilterBarProps {
+  filters: GlobalFilters;
+  onFiltersChange: (filters: GlobalFilters) => void;
+  onApply?: () => void;
+  compact?: boolean;
+}
+
+const ASSET_OPTIONS: { value: AssetFilter; label: string }[] = [
+  { value: 'all', label: 'All Assets' },
+  { value: 'intake', label: 'Intake' },
+  { value: 'wtp', label: 'WTP' },
+  { value: 'oht-1', label: 'OHT-1' },
+  { value: 'oht-2', label: 'OHT-2' },
+  { value: 'oht-3', label: 'OHT-3' },
+];
+
+const GlobalFilterBar: React.FC<GlobalFilterBarProps> = ({ filters, onFiltersChange, onApply, compact }) => {
+  const toggleAsset = (asset: AssetFilter) => {
+    if (asset === 'all') {
+      onFiltersChange({ ...filters, assets: ['all'] });
+      return;
+    }
+    let newAssets: AssetFilter[] = filters.assets.filter((a): a is Exclude<AssetFilter, 'all'> => a !== 'all');
+    if (newAssets.includes(asset)) {
+      newAssets = newAssets.filter(a => a !== asset);
+    } else {
+      newAssets.push(asset);
+    }
+    if (newAssets.length === 0) newAssets = ['all' as AssetFilter];
+    onFiltersChange({ ...filters, assets: newAssets });
+  };
+
+  const isAssetActive = (asset: AssetFilter) => filters.assets.includes(asset) || filters.assets.includes('all');
+
+  return (
+    <div className={cn(
+      "premium-card rounded-xl p-3 mb-4 flex flex-wrap items-center gap-3",
+      compact && "p-2 gap-2"
+    )}>
+      <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
+      
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="outline" size="sm" className="h-8 text-xs">
+            <CalendarIcon className="mr-1 h-3 w-3" />
+            {filters.startDate ? format(filters.startDate, 'MMM dd') : 'Start'}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="start">
+          <Calendar mode="single" selected={filters.startDate}
+            onSelect={(d) => onFiltersChange({ ...filters, startDate: d })}
+            disabled={{ after: new Date() }} className="pointer-events-auto" />
+        </PopoverContent>
+      </Popover>
+
+      <span className="text-xs text-muted-foreground">→</span>
+
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="outline" size="sm" className="h-8 text-xs">
+            <CalendarIcon className="mr-1 h-3 w-3" />
+            {filters.endDate ? format(filters.endDate, 'MMM dd') : 'End'}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="start">
+          <Calendar mode="single" selected={filters.endDate}
+            onSelect={(d) => onFiltersChange({ ...filters, endDate: d })}
+            disabled={{ after: new Date() }} className="pointer-events-auto" />
+        </PopoverContent>
+      </Popover>
+
+      <div className="w-px h-6 bg-border" />
+
+      <div className="flex flex-wrap gap-1">
+        {ASSET_OPTIONS.map(opt => (
+          <Badge
+            key={opt.value}
+            variant={isAssetActive(opt.value) ? 'default' : 'outline'}
+            className={cn(
+              "cursor-pointer text-xs px-2 py-0.5 transition-all",
+              isAssetActive(opt.value) ? 'bg-primary text-primary-foreground' : 'hover:bg-secondary'
+            )}
+            onClick={() => toggleAsset(opt.value)}
+          >
+            {opt.label}
+          </Badge>
+        ))}
+      </div>
+
+      <div className="w-px h-6 bg-border" />
+
+      <Select value={filters.density} onValueChange={(v: DensityFilter) => onFiltersChange({ ...filters, density: v })}>
+        <SelectTrigger className="h-8 w-[120px] text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="fast">⚡ Fast</SelectItem>
+          <SelectItem value="detailed">📊 Detailed</SelectItem>
+          <SelectItem value="analytical">📈 Analytical</SelectItem>
+        </SelectContent>
+      </Select>
+
+      {onApply && (
+        <Button size="sm" className="h-8 text-xs ml-auto" onClick={onApply}>
+          Apply
+        </Button>
+      )}
+    </div>
+  );
+};
+
+export default GlobalFilterBar;

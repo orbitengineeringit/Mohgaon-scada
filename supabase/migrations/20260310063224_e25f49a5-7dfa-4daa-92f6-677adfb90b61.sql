@@ -1,0 +1,4 @@
+ALTER TABLE public.mqtt_config 
+  ADD COLUMN IF NOT EXISTS oht_topic_4 text NOT NULL DEFAULT 'Orbit/BuaBicchiya/OHT0000000004',
+  ADD COLUMN IF NOT EXISTS oht_topic_5 text NOT NULL DEFAULT 'Orbit/BuaBicchiya/OHT0000000005',
+  ADD COLUMN IF NOT EXISTS oht_topic_6 text NOT NULL DEFAULT 'Orbit/BuaBicchiya/OHT0000000006';

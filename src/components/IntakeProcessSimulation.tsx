@@ -638,7 +638,18 @@ const IntakeProcessSimulation: React.FC = () => {
                 ))}
               </svg>
 
-              <text x={ex} y={ey + 185} textAnchor="middle" fontSize="12" fontWeight="700" fill="hsl(var(--success))">ACTIVE</text>
+              <g transform={`translate(${ex}, ${ey + 178})`}>
+                <rect x={-28} y={0} width={56} height={16} rx={4}
+                  fill={kwLive ? 'hsl(var(--success) / 0.15)' : 'hsl(var(--destructive) / 0.15)'}
+                  stroke={kwLive ? 'hsl(var(--success))' : 'hsl(var(--destructive))'} strokeWidth="0.8" />
+                <circle cx={-18} cy={8} r={2.5} fill={kwLive ? 'hsl(var(--success))' : 'hsl(var(--destructive))'}>
+                  <animate attributeName="opacity" values="1;0.4;1" dur={kwLive ? '1.6s' : '0.8s'} repeatCount="indefinite" />
+                </circle>
+                <text x={4} y={12} textAnchor="middle" fontSize="10" fontWeight="800" letterSpacing="1"
+                  fill={kwLive ? 'hsl(var(--success))' : 'hsl(var(--destructive))'}>
+                  {kwLive ? 'ON' : 'OFF'}
+                </text>
+              </g>
             </g>
           );
         })()}

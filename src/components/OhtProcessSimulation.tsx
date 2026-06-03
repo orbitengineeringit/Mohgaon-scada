@@ -190,6 +190,12 @@ const OhtProcessSimulation: React.FC<OhtProcessSimulationProps> = ({ sensors, ta
 
   return (
     <div className="w-full relative overflow-hidden bg-background border border-border/50 rounded-2xl p-1 md:p-3">
+      <div className="relative z-10">
+        <SensorStatusStrip
+          tags={tags}
+          sensorIds={sensors.filter(s => !s.notInstalled).map(s => s.id)}
+        />
+      </div>
       {/* Blueprint Grid Background Pattern */}
       <div
         className="w-full h-full min-h-[350px]"

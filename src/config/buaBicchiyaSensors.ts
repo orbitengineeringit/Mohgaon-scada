@@ -34,7 +34,7 @@ const createOhtSensors = (ohtNum: number): BuaBicchiyaSensor[] => {
   const prefix = `OHT${ohtNum}`;
   const sub = `OHT-${ohtNum}`;
   return [
-    { id: `${prefix}-PT`, mqttKey: 'PT', label: 'Pressure (PT)', unit: 'Bar', min: 0, max: 10, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'pt' },
+    { id: `${prefix}-PT`, mqttKey: 'PT_01', label: 'Pressure (PT)', unit: 'Bar', min: 0, max: 10, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'pt' },
     { id: `${prefix}-LT`, mqttKey: 'LEVEL', label: 'Level (LT)', unit: '%', min: 0, max: 100, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'lt' },
     { id: `${prefix}-Flow-IN`, mqttKey: 'FLOW', label: 'Flow Meter (Inlet)', unit: 'm³/hr', min: 0, max: 50, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'flow' },
     { id: `${prefix}-Flow-OUT`, mqttKey: 'FLOW_OUT', label: 'Flow Meter (Outlet)', unit: 'm³/hr', min: 0, max: 50, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'flow', notInstalled: true },

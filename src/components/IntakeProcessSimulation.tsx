@@ -410,25 +410,30 @@ const IntakeProcessSimulation: React.FC = () => {
 
             // Map pressure to animation speed linearly
             const pNorm = Math.min(10, Math.max(1, pressure)) / 10;
-            const flowDur = (1.5 - (pNorm * 1.1)).toFixed(2) + 's'; // 0.4s (fast) to 1.5s (slow)
-
-            const dash = w * 0.6;
-            const gap = w * 0.7;
-            const cycle = dash + gap;
+            const durSec = 3.0 - pNorm * 1.8; // 1.2s (fast) → 3.0s (slow)
+            const flowDur = durSec.toFixed(2) + 's';
+            const r = Math.max(2.5, w * 0.18);
+            const uid = Math.abs(d.split('').reduce((a, c) => a + c.charCodeAt(0), 0)).toString(36) + Math.round(w);
+            // 6 wave crests, each phase-shifted via negative begin → continuous flowing stream
+            const N = 6;
 
             return (
-              <path
-                d={d}
-                fill="none"
-                stroke="#e0f2fe"
-                strokeWidth={Math.max(4, w * 0.35)}
-                strokeLinecap="butt"
-                strokeLinejoin="round"
-                strokeDasharray={`${dash} ${gap}`}
-                opacity="0.9"
-              >
-                <animate attributeName="stroke-dashoffset" from={cycle} to="0" dur={flowDur} repeatCount="indefinite" calcMode="linear" />
-              </path>
+              <g opacity="0.95">
+                <path id={`flow-${uid}`} d={d} fill="none" stroke="none" />
+                {Array.from({ length: N }, (_, i) => (
+                  <circle key={i} r={r} fill="#f0f9ff" opacity={0.9}>
+                    <animateMotion
+                      dur={flowDur}
+                      repeatCount="indefinite"
+                      begin={`-${((i / N) * durSec).toFixed(3)}s`}
+                      calcMode="linear"
+                      rotate="auto"
+                    >
+                      <mpath href={`#flow-${uid}`} />
+                    </animateMotion>
+                  </circle>
+                ))}
+              </g>
             );
           };
 

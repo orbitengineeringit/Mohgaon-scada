@@ -34,12 +34,12 @@ const createOhtSensors = (ohtNum: number): BuaBicchiyaSensor[] => {
   const prefix = `OHT${ohtNum}`;
   const sub = `OHT-${ohtNum}`;
   return [
-    { id: `${prefix}-PT`, mqttKey: 'PT', label: 'Pressure (PT)', unit: 'Bar', min: 0, max: 10, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'pt' },
+    { id: `${prefix}-PT`, mqttKey: 'PT_01', label: 'Pressure (PT)', unit: 'Bar', min: 0, max: 10, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'pt' },
     { id: `${prefix}-LT`, mqttKey: 'LEVEL', label: 'Level (LT)', unit: '%', min: 0, max: 100, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'lt' },
-    { id: `${prefix}-Flow-IN`, mqttKey: 'FLOW_IN', label: 'Flow Meter (Inlet)', unit: 'm³/hr', min: 0, max: 50, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'flow' },
+    { id: `${prefix}-Flow-IN`, mqttKey: 'FLOW', label: 'Flow Meter (Inlet)', unit: 'm³/hr', min: 0, max: 50, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'flow' },
     { id: `${prefix}-Flow-OUT`, mqttKey: 'FLOW_OUT', label: 'Flow Meter (Outlet)', unit: 'm³/hr', min: 0, max: 50, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'flow', notInstalled: true },
     { id: `${prefix}-FCV`, mqttKey: 'FCV', label: 'Flow Control Valve', unit: '%', min: 0, max: 100, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'fcv', notInstalled: true },
-    { id: `${prefix}-Totalizer`, mqttKey: '', label: 'Totalizer', unit: 'm³', min: 0, max: 999999, section: 'oht', subsection: sub, type: 'totalizer', instrumentType: 'totalizer' },
+    { id: `${prefix}-Totalizer`, mqttKey: 'TOTALIZER', label: 'Totalizer', unit: 'm³', min: 0, max: 999999, section: 'oht', subsection: sub, type: 'totalizer', instrumentType: 'totalizer' },
   ];
 };
 
@@ -53,11 +53,11 @@ export const ALL_OHT_SENSORS = [...OHT1_SENSORS, ...OHT2_SENSORS, ...OHT3_SENSOR
 export const INTAKE_SENSORS: BuaBicchiyaSensor[] = [
   { id: 'INT-PT1', mqttKey: 'PT_01', label: 'Pressure 1 (PT)', unit: 'Bar', min: 0, max: 10, section: 'intake', type: 'analog', instrumentType: 'pt' },
   { id: 'INT-PT2', mqttKey: 'PT_02', label: 'Pressure 2 (PT)', unit: 'Bar', min: 0, max: 10, section: 'intake', type: 'analog', instrumentType: 'pt' },
-  { id: 'INT-CombinedPT', mqttKey: 'PT_COM', label: 'Combined Pressure (P1+P2)', unit: 'Bar', min: 0, max: 10, section: 'intake', type: 'analog', instrumentType: 'combined_pt' },
+  { id: 'INT-CombinedPT', mqttKey: 'PT_03', label: 'Combined Pressure (P1+P2)', unit: 'Bar', min: 0, max: 10, section: 'intake', type: 'analog', instrumentType: 'combined_pt' },
   { id: 'INT-LT', mqttKey: 'LEVEL', label: 'Level (LT)', unit: '%', min: 0, max: 100, section: 'intake', type: 'analog', instrumentType: 'lt' },
   { id: 'INT-Flow', mqttKey: 'FLOW', label: 'Flow Meter', unit: 'm³/hr', min: 0, max: 200, section: 'intake', type: 'analog', instrumentType: 'flow' },
-  { id: 'INT-Totalizer', mqttKey: '', label: 'Totalizer', unit: 'm³', min: 0, max: 999999, section: 'intake', type: 'totalizer', instrumentType: 'totalizer' },
-  { id: 'INT-KW', mqttKey: 'KW', label: 'Energy Meter', unit: 'kW', min: 0, max: 100, section: 'intake', type: 'analog', instrumentType: 'kw' },
+  { id: 'INT-Totalizer', mqttKey: 'TOTALIZER', label: 'Totalizer', unit: 'm³', min: 0, max: 999999, section: 'intake', type: 'totalizer', instrumentType: 'totalizer' },
+  { id: 'INT-KW', mqttKey: 'KW', label: 'Energy Meter', unit: 'kW', min: 0, max: 100, section: 'intake', type: 'analog', instrumentType: 'kw', notInstalled: true },
   { id: 'INT-Pump1', mqttKey: '', label: 'VT Pump 1', unit: '', min: 0, max: 1, section: 'intake', type: 'digital', instrumentType: 'pump', derivedFromPt: 'INT-PT1' },
   { id: 'INT-Pump2', mqttKey: '', label: 'VT Pump 2', unit: '', min: 0, max: 1, section: 'intake', type: 'digital', instrumentType: 'pump', derivedFromPt: 'INT-PT2' },
 ];
@@ -171,6 +171,6 @@ export const getPumpSensors = (section: SectionType): BuaBicchiyaSensor[] => {
 };
 
 // Valid MQTT keys per section (only keys that actually come from MQTT)
-export const VALID_OHT_KEYS = ['PT', 'LEVEL', 'FLOW_IN', 'FLOW_OUT', 'FCV'];
-export const VALID_INTAKE_KEYS = ['PT_01', 'PT_02', 'PT_COM', 'LEVEL', 'FLOW', 'KW'];
+export const VALID_OHT_KEYS = ['PT', 'PT_01', 'LEVEL', 'FLOW', 'FLOW_IN', 'FLOW_OUT', 'FCV', 'TOTALIZER'];
+export const VALID_INTAKE_KEYS = ['PT_01', 'PT_02', 'PT_03', 'PT_COM', 'LEVEL', 'FLOW', 'TOTALIZER', 'KW'];
 export const VALID_WTP_KEYS = ['CWR_LEVEL', 'BW_LEVEL', 'PT_01', 'PT_02', 'PT_03', 'CWR_PT_04', 'CWR_PT_05', 'CWR_PT_06', 'FLOW', 'FLOW_IN', 'FLOW_OUT', 'PH', 'CL', 'TR', 'RAW_PH', 'RAW_TR', 'CW_PH', 'CW_CL', 'CW_TR', 'TOTALIZER', 'KW'];

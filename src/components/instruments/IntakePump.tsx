@@ -115,37 +115,37 @@ const IntakePump: React.FC<IntakePumpProps> = ({ isOn, label, size = 120 }) => {
         {isOn && (
           <g>
             {/* Water shooting OUT from the side outlet pipe */}
-            <circle r="2.5" fill="hsl(199 89% 55%)" opacity="0.7">
+            <circle r="2.5" fill="hsl(200 70% 82%)" opacity="0.7">
               <animate attributeName="cx" values="88;94;98;90" dur="1.2s" repeatCount="indefinite" />
               <animate attributeName="cy" values="90;82;72;62" dur="1.2s" repeatCount="indefinite" />
               <animate attributeName="opacity" values="0.8;0.6;0.3;0" dur="1.2s" repeatCount="indefinite" />
               <animate attributeName="r" values="3;3.5;2;1" dur="1.2s" repeatCount="indefinite" />
             </circle>
-            <circle r="2" fill="hsl(199 89% 60%)" opacity="0.6">
+            <circle r="2" fill="hsl(200 70% 85%)" opacity="0.6">
               <animate attributeName="cx" values="88;97;102;95" dur="1s" repeatCount="indefinite" begin="0.3s" />
               <animate attributeName="cy" values="92;80;68;58" dur="1s" repeatCount="indefinite" begin="0.3s" />
               <animate attributeName="opacity" values="0.7;0.5;0.2;0" dur="1s" repeatCount="indefinite" begin="0.3s" />
             </circle>
 
-            <circle cx="90" cy="90" r="5" fill="hsl(199 89% 55%)" opacity="0.15">
+            <circle cx="90" cy="90" r="5" fill="hsl(200 70% 82%)" opacity="0.15">
               <animate attributeName="r" values="4;8;4" dur="1s" repeatCount="indefinite" />
               <animate attributeName="opacity" values="0.2;0.05;0.2" dur="1s" repeatCount="indefinite" />
             </circle>
 
             {/* Suction bubbles at the new strainer */}
-            <circle r="1.5" fill="hsl(199 89% 70%)" opacity="0.5">
+            <circle r="1.5" fill="hsl(200 80% 92%)" opacity="0.5">
               <animate attributeName="cx" values="42;45;41" dur="1.5s" repeatCount="indefinite" />
               <animate attributeName="cy" values="264;254;244" dur="1.5s" repeatCount="indefinite" />
               <animate attributeName="opacity" values="0.5;0.3;0" dur="1.5s" repeatCount="indefinite" />
             </circle>
-            <circle r="1" fill="hsl(199 89% 70%)" opacity="0.4">
+            <circle r="1" fill="hsl(200 80% 92%)" opacity="0.4">
               <animate attributeName="cx" values="55;52;56" dur="1.2s" repeatCount="indefinite" begin="0.4s" />
               <animate attributeName="cy" values="264;250;234" dur="1.2s" repeatCount="indefinite" begin="0.4s" />
               <animate attributeName="opacity" values="0.4;0.2;0" dur="1.2s" repeatCount="indefinite" begin="0.4s" />
             </circle>
 
             {/* Internal water flow line */}
-            <line x1="50" y1="240" x2="50" y2="90" stroke="hsl(199 89% 55%)" strokeWidth="4" strokeLinecap="round" opacity="0.15">
+            <line x1="50" y1="240" x2="50" y2="90" stroke="hsl(200 70% 82%)" strokeWidth="4" strokeLinecap="round" opacity="0.15">
               <animate attributeName="opacity" values="0.08;0.25;0.08" dur="1.5s" repeatCount="indefinite" />
             </line>
           </g>

@@ -23,13 +23,13 @@ const LevelBar: React.FC<LevelBarProps> = ({ value, min, max, unit }) => {
       >
         {/* Water body - natural reservoir water green-blue */}
         <div className="absolute inset-0" style={{
-          background: 'linear-gradient(to bottom, hsl(160 45% 45% / 0.80), hsl(155 40% 38% / 0.88), hsl(150 35% 28% / 0.95))',
+          background: 'linear-gradient(to bottom, hsl(200 70% 88% / 0.75), hsl(200 65% 78% / 0.85), hsl(200 60% 70% / 0.9))',
         }} />
 
         {/* Surface wave animation */}
         <div className="absolute top-0 left-0 right-0 h-3 overflow-hidden">
           <svg width="100%" height="12" viewBox="0 0 200 12" preserveAspectRatio="none" className="absolute top-0">
-            <path fill="hsl(160 50% 55% / 0.5)" strokeWidth="0">
+            <path fill="hsl(200 80% 95% / 0.6)" strokeWidth="0">
               <animate
                 attributeName="d"
                 dur="4s"
@@ -43,7 +43,7 @@ const LevelBar: React.FC<LevelBarProps> = ({ value, min, max, unit }) => {
         {/* Light shimmer on water surface */}
         <div className="absolute top-0 left-0 right-0 h-1.5 transition-all duration-1000"
           style={{
-            background: 'linear-gradient(90deg, transparent, hsl(160 50% 60% / 0.35), transparent)',
+            background: 'linear-gradient(90deg, transparent, hsl(200 90% 97% / 0.5), transparent)',
             backgroundSize: '200% 100%',
             animation: 'shimmer 4s linear infinite',
           }}

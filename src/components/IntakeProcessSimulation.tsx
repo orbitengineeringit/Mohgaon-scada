@@ -358,8 +358,8 @@ const IntakeProcessSimulation: React.FC = () => {
             <stop offset="100%" stopColor={pDark} />
           </linearGradient>
           <linearGradient id="p-water" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="hsl(160 45% 45%)" stopOpacity="1" />
-            <stop offset="100%" stopColor="hsl(160 45% 45%)" stopOpacity="1" />
+            <stop offset="0%" stopColor="hsl(200 70% 88%)" stopOpacity="0.85" />
+            <stop offset="100%" stopColor="hsl(200 60% 75%)" stopOpacity="0.9" />
           </linearGradient>
           <linearGradient id="p-ground" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#cbd5e1" />
@@ -412,6 +412,10 @@ const IntakeProcessSimulation: React.FC = () => {
             const pNorm = Math.min(10, Math.max(1, pressure)) / 10;
             const flowDur = (1.5 - (pNorm * 1.1)).toFixed(2) + 's'; // 0.4s (fast) to 1.5s (slow)
 
+            const dash = w * 0.6;
+            const gap = w * 0.7;
+            const cycle = dash + gap;
+
             return (
               <path
                 d={d}
@@ -420,10 +424,10 @@ const IntakeProcessSimulation: React.FC = () => {
                 strokeWidth={Math.max(4, w * 0.35)}
                 strokeLinecap="butt"
                 strokeLinejoin="round"
-                strokeDasharray={`${w * 0.6} ${w * 0.7}`}
+                strokeDasharray={`${dash} ${gap}`}
                 opacity="0.9"
               >
-                <animate attributeName="stroke-dashoffset" from="40" to="0" dur={flowDur} repeatCount="indefinite" />
+                <animate attributeName="stroke-dashoffset" from={cycle} to="0" dur={flowDur} repeatCount="indefinite" calcMode="linear" />
               </path>
             );
           };
@@ -671,7 +675,7 @@ const IntakeProcessSimulation: React.FC = () => {
         <g clipPath="url(#p-sump-clip)">
           <rect x={sL + 16} y={wY} width={sW - 32} height={sH} fill="url(#p-water)" />
           {/* Animated Water Surface Waves */}
-          <path fill="hsl(160 50% 55%)" fillOpacity="0.4">
+          <path fill="hsl(200 80% 95%)" fillOpacity="0.5">
             <animate attributeName="d" values={`M ${sL + 16} ${wY} Q ${sCx - 70} ${wY - 6} ${sCx} ${wY} Q ${sCx + 70} ${wY + 6} ${sR - 16} ${wY} V ${wY + 10} H ${sL + 16} Z;M ${sL + 16} ${wY} Q ${sCx - 70} ${wY + 6} ${sCx} ${wY} Q ${sCx + 70} ${wY - 6} ${sR - 16} ${wY} V ${wY + 10} H ${sL + 16} Z;M ${sL + 16} ${wY} Q ${sCx - 70} ${wY - 6} ${sCx} ${wY} Q ${sCx + 70} ${wY + 6} ${sR - 16} ${wY} V ${wY + 10} H ${sL + 16} Z`} dur="3s" repeatCount="indefinite" />
           </path>
         </g>

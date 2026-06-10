@@ -579,12 +579,12 @@ const HistoryPage: React.FC = () => {
             {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading...</> : <><Database className="mr-2 h-4 w-4" />Fetch Data</>}
           </Button>
           <Button 
-            onClick={exportToCSV} 
+            onClick={exportToExcel} 
             disabled={isExporting || totalCount === 0} 
             variant="outline" 
             className="flex-1 sm:flex-none border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5 hover:bg-emerald-500/10 hover:border-emerald-500 font-semibold shadow-sm transition-all active:scale-[0.98] duration-200"
           >
-            {isExporting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Exporting...</> : <><FileSpreadsheet className="mr-2 h-4 w-4" />Export CSV</>}
+            {isExporting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Exporting...</> : <><FileSpreadsheet className="mr-2 h-4 w-4" />Export Excel</>}
           </Button>
           <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto justify-center glass border border-border/40 px-3.5 py-1.5 rounded-xl shadow-sm">
             <Switch id="auto-refresh" checked={autoRefresh} onCheckedChange={setAutoRefresh} disabled={totalCount === 0} />

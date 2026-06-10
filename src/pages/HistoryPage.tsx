@@ -867,3 +867,86 @@ const HistoryPage: React.FC = () => {
 };
 
 export default HistoryPage;
+
+interface ExportProgressState {
+  open: boolean;
+  phase: 'estimating' | 'fetching' | 'building' | 'done';
+  fetched: number;
+  total: number;
+  estSec: number;
+  startedAt: number;
+}
+
+const ExportProgressDialog: React.FC<{ state: ExportProgressState }> = ({ state }) => {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!state.open) return;
+    const id = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(id);
+  }, [state.open]);
+
+  const elapsedSec = state.startedAt ? (now - state.startedAt) / 1000 : 0;
+  const pct = state.total > 0 ? Math.min(99, Math.round((state.fetched / state.total) * 100)) : 0;
+  const displayPct = state.phase === 'done' ? 100 : state.phase === 'building' ? Math.max(pct, 95) : pct;
+
+  // Recompute ETA from actual throughput once we have samples
+  let remainSec = Math.max(0, state.estSec - elapsedSec);
+  if (state.fetched > 50 && state.total > 0 && state.phase === 'fetching') {
+    const rate = state.fetched / Math.max(0.5, elapsedSec);
+    remainSec = Math.max(0, (state.total - state.fetched) / Math.max(1, rate));
+  }
+  const formatSec = (s: number) => s < 60 ? `${Math.ceil(s)}s` : `${Math.floor(s / 60)}m ${Math.ceil(s % 60)}s`;
+
+  const phaseLabel: Record<ExportProgressState['phase'], string> = {
+    estimating: '🔍 Estimating size…',
+    fetching: '📥 Fetching data',
+    building: '🎨 Building Excel file',
+    done: '✅ Done',
+  };
+
+  return (
+    <Dialog open={state.open}>
+      <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FileSpreadsheet className="h-5 w-5 text-emerald-500" />
+            Exporting to Excel
+          </DialogTitle>
+          <DialogDescription>
+            {state.phase === 'estimating'
+              ? 'Calculating how much data needs to be exported…'
+              : `${state.fetched.toLocaleString()} of ${state.total.toLocaleString()} records`}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 pt-1">
+          <Progress value={displayPct} className="h-2" />
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-medium text-foreground">{phaseLabel[state.phase]}</span>
+            <span className="font-mono text-muted-foreground">{displayPct}%</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            <div className="rounded-lg border border-border/40 bg-muted/30 p-2.5">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Approx. time</div>
+              <div className="text-sm font-bold text-foreground mt-0.5">
+                {state.estSec ? `~${formatSec(state.estSec)}` : '—'}
+              </div>
+            </div>
+            <div className="rounded-lg border border-border/40 bg-muted/30 p-2.5">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                {state.phase === 'done' ? 'Elapsed' : 'Remaining'}
+              </div>
+              <div className="text-sm font-bold text-foreground mt-0.5">
+                {state.phase === 'done' ? formatSec(elapsedSec) : (state.phase === 'fetching' ? formatSec(remainSec) : '…')}
+              </div>
+            </div>
+          </div>
+          {state.phase === 'fetching' && state.total > 5000 && (
+            <p className="text-[11px] text-muted-foreground text-center">
+              Tip: larger date ranges take longer — please keep this tab open.
+            </p>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};

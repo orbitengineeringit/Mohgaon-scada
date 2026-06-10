@@ -45,7 +45,7 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
   }, [tag.value]);
 
   // Single shared connection rule (see useTagConnection).
-  // 'connected' | 'inactive' | 'no-data' | 'stale'
+  // 'connected' | 'inactive' | 'no-data'
   const connection = useTagConnection(tag);
 
   const handleAlarmSave = useCallback((settings: AlarmSettings) => {
@@ -161,7 +161,7 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
   };
 
   const getHealthBadge = () => {
-    // Four-state badge so operators can tell ON, OFF, STALE, and ZERO.
+    // 3-state badge so operators can tell ON, OFF, and ZERO instantly.
     let label: string;
     let className: string;
     if (connection === 'connected') {
@@ -170,9 +170,6 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
     } else if (connection === 'inactive') {
       label = 'ZERO';
       className = 'bg-sky-500/15 text-sky-500 border border-sky-500/30';
-    } else if (connection === 'stale') {
-      label = 'STALE';
-      className = 'bg-warning/15 text-warning border border-warning/30 animate-pulse';
     } else {
       label = 'OFF';
       className = 'bg-destructive/15 text-destructive border border-destructive/30 animate-pulse';
@@ -187,14 +184,13 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
   const ConnIcon: React.FC<{ className?: string }> = ({ className }) => {
     if (connection === 'connected') return <Wifi className={`${className} text-success`} />;
     if (connection === 'inactive') return <CircleSlash className={`${className} text-sky-500`} />;
-    if (connection === 'stale') return <CircleSlash className={`${className} text-warning animate-pulse`} />;
     return <WifiOff className={`${className} text-destructive animate-pulse`} />;
   };
 
   if (isDigital) {
     return (
       <div
-        className={`premium-card rounded-xl p-3 sm:p-4 relative overflow-visible opacity-0 animate-fade-in flex flex-col h-full ${connection === 'no-data' ? 'border-destructive/50' : ''} ${connection === 'stale' ? 'border-warning/50' : ''} ${connection === 'inactive' ? 'border-sky-500/30' : ''}`}
+        className={`premium-card rounded-xl p-3 sm:p-4 relative overflow-visible opacity-0 animate-fade-in flex flex-col h-full ${connection === 'no-data' ? 'border-destructive/50' : ''} ${connection === 'inactive' ? 'border-sky-500/30' : ''}`}
         style={{ animationDelay: `${index * 40}ms` }}
       >
         <div className="relative z-10 flex flex-col flex-1">
@@ -225,7 +221,6 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
           opacity-0 animate-fade-in
           flex flex-col h-full
           ${connection === 'no-data' ? 'border-destructive/50' : ''}
-          ${connection === 'stale' ? 'border-warning/50' : ''}
           ${connection === 'inactive' ? 'border-sky-500/30' : ''}
         `}
         style={{ animationDelay: `${index * 40}ms` }}

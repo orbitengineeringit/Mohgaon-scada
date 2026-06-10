@@ -120,9 +120,21 @@ export const DEFAULT_MQTT_TOPICS: Record<string, string> = {
 export const MQTT_TOPICS: Record<string, string> = { ...DEFAULT_MQTT_TOPICS };
 
 // Built dynamically when topics are loaded from DB
-export const TOPIC_TO_SECTION: Record<string, { section: SectionType; subsection?: string }> = {};
+export const TOPIC_TO_SECTION: Record<string, { section: SectionType; subsection?: string }> = {
+  'Orbit/BICHIYA/INTAKE/0000000001': { section: 'intake' },
+  'Orbit/BICHIYA/WTP/0000000001': { section: 'wtp' },
+  'Orbit/BICHIYA/OHT01/0000000001': { section: 'oht', subsection: 'OHT-1' },
+  'Orbit/BICHIYA/OHT02/0000000001': { section: 'oht', subsection: 'OHT-2' },
+  'Orbit/BICHIYA/OHT03/0000000001': { section: 'oht', subsection: 'OHT-3' },
+};
 
-export const ALL_MQTT_TOPICS: string[] = [];
+export const ALL_MQTT_TOPICS: string[] = [
+  'Orbit/BICHIYA/INTAKE/0000000001',
+  'Orbit/BICHIYA/WTP/0000000001',
+  'Orbit/BICHIYA/OHT01/0000000001',
+  'Orbit/BICHIYA/OHT02/0000000001',
+  'Orbit/BICHIYA/OHT03/0000000001',
+];
 
 /** Called by MqttContext after loading topics from database */
 export const setTopicsFromDb = (topics: Record<string, string>) => {

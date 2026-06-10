@@ -62,11 +62,9 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
   const [lastError, setLastError] = useState<string | null>(null);
   const clientRef = useRef<MqttClient | null>(null);
   const messageCountRef = useRef(0);
-  const reconnectAttempts = useRef(0);
   const connectRef = useRef<() => Promise<void>>();
 
   useEffect(() => { onMessageRef.current = onMessage; }, [onMessage]);
-  const maxReconnectAttempts = 999999;
 
   useEffect(() => {
     const loadConfig = async () => {
@@ -168,9 +166,21 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
     const mapping = TOPIC_TO_SECTION[topic];
     if (mapping) return { section: mapping.section, subsection: mapping.subsection };
     if (topic.includes('OHT')) {
-      if (topic.includes('0000000001')) return { section: 'oht', subsection: 'OHT-1' };
-      if (topic.includes('0000000002')) return { section: 'oht', subsection: 'OHT-2' };
-      if (topic.includes('0000000003')) return { section: 'oht', subsection: 'OHT-3' };
+      if (topic.includes('OHT01') || topic.includes('OHT-1') || topic.includes('OHT1')) {
+        return { section: 'oht', subsection: 'OHT-1' };
+      }
+      if (topic.includes('OHT02') || topic.includes('OHT-2') || topic.includes('OHT2')) {
+        return { section: 'oht', subsection: 'OHT-2' };
+      }
+      if (topic.includes('OHT03') || topic.includes('OHT-3') || topic.includes('OHT3')) {
+        return { section: 'oht', subsection: 'OHT-3' };
+      }
+      // Fallback matching logic based on topic tail/identifier
+      if (topic.endsWith('/0000000001') && !topic.includes('OHT02') && !topic.includes('OHT03')) {
+        return { section: 'oht', subsection: 'OHT-1' };
+      }
+      if (topic.endsWith('/0000000002') || topic.includes('0000000002')) return { section: 'oht', subsection: 'OHT-2' };
+      if (topic.endsWith('/0000000003') || topic.includes('0000000003')) return { section: 'oht', subsection: 'OHT-3' };
       return { section: 'oht' };
     }
     if (topic.includes('INTAKE') || topic.includes('INT')) return { section: 'intake' };
@@ -182,10 +192,24 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
     if (isConnecting || isConnected) return;
     setIsConnecting(true);
     setLastError(null);
+
+    // Clean up any existing client before connecting to avoid duplicates/leaks
+    if (clientRef.current) {
+      try {
+        clientRef.current.end(true);
+      } catch (err) {
+        logError('MqttContext.cleanupOldClient', err);
+      }
+      clientRef.current = null;
+    }
+
     try {
       const options: IClientOptions = {
         clientId: config.clientId || `bua_bicchiya_${Math.random().toString(16).substr(2, 8)}`,
-        clean: true, connectTimeout: 10000, reconnectPeriod: 0,
+        clean: true,
+        connectTimeout: 10000,
+        reconnectPeriod: 3000, // Native self-healing reconnect every 3s
+        keepalive: 30, // Send ping every 30s to keep broker connection alive
       };
       if (config.username) { options.username = config.username; options.password = config.password; }
 
@@ -193,7 +217,8 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
       clientRef.current = client;
 
       client.on('connect', () => {
-        setIsConnected(true); setIsConnecting(false); reconnectAttempts.current = 0;
+        setIsConnected(true);
+        setIsConnecting(false);
         toast.success('MQTT Connected');
         const topics = ALL_MQTT_TOPICS;
         client.subscribe(topics, (err) => {
@@ -218,17 +243,24 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
         if (onMessageRef.current) onMessageRef.current(message);
       });
 
-      client.on('error', (err) => { logError('MqttContext.connection', err); setLastError(err.message); setIsConnecting(false); });
+      client.on('error', (err) => {
+        logError('MqttContext.connection', err);
+        setLastError(err.message);
+        setIsConnecting(false);
+      });
+
       client.on('close', () => {
         setIsConnected(false);
-        if (reconnectAttempts.current < maxReconnectAttempts && config.autoConnect) {
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
-          reconnectAttempts.current++;
-          setTimeout(() => connectRef.current?.(), delay);
+        setIsConnecting(false);
+        if (config.id) {
+          supabase.from('mqtt_config').update({ is_connected: false }).eq('id', config.id).then(() => {});
         }
-        if (config.id) supabase.from('mqtt_config').update({ is_connected: false }).eq('id', config.id).then(() => {});
       });
-      client.on('offline', () => setIsConnected(false));
+
+      client.on('offline', () => {
+        setIsConnected(false);
+        setIsConnecting(false);
+      });
     } catch (error) {
       setIsConnecting(false);
       setLastError(error instanceof Error ? error.message : 'Connection failed');
@@ -238,9 +270,12 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
   useEffect(() => { connectRef.current = connect; }, [connect]);
 
   const disconnect = useCallback(() => {
-    if (clientRef.current) { clientRef.current.end(true); clientRef.current = null; }
-    setIsConnected(false); setIsConnecting(false);
-    reconnectAttempts.current = maxReconnectAttempts;
+    if (clientRef.current) {
+      clientRef.current.end(true);
+      clientRef.current = null;
+    }
+    setIsConnected(false);
+    setIsConnecting(false);
     toast.info('MQTT Disconnected');
     if (config.id) supabase.from('mqtt_config').update({ is_connected: false }).eq('id', config.id).then(() => {});
   }, [config.id]);

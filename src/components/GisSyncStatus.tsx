@@ -38,6 +38,7 @@ const GisSyncStatus = () => {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [logs, setLogs] = useState<SyncLog[]>([]);
+  const [logsLoaded, setLogsLoaded] = useState(false);
   const [lastPayload, setLastPayload] = useState<any>(null);
   const [lastResponse, setLastResponse] = useState<any>(null);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
@@ -59,6 +60,7 @@ const GisSyncStatus = () => {
       .order('triggered_at', { ascending: false })
       .limit(10);
     if (data) setLogs(data as SyncLog[]);
+    setLogsLoaded(true);
   };
 
   useEffect(() => {
@@ -142,7 +144,8 @@ const GisSyncStatus = () => {
   const lastLog = logs[0];
   const successCount = logs.filter(l => l.success).length;
   const batchTotal = logs.length;
-  const gatewayOk = !!lastLog?.success;
+  const gatewayOk = logsLoaded ? !!lastLog?.success : true;
+  const gatewayUnknown = !logsLoaded;
   const lastDuration = lastLog?.duration_ms ?? lastResponse?.duration_ms;
   const lastStatus = lastLog?.response_status ?? lastResponse?.status;
   const lastTimeStr = lastSyncAt
@@ -197,14 +200,21 @@ const GisSyncStatus = () => {
               label="GATEWAY CONNECTION"
               icon={<Wifi className="h-4 w-4" />}
               value={
-                <span className={`flex items-center gap-1.5 font-bold ${gatewayOk ? 'text-success' : 'text-destructive'}`}>
-                  {gatewayOk ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-                  {gatewayOk ? 'CONNECTED' : 'DISCONNECTED'}
-                </span>
+                gatewayUnknown ? (
+                  <span className="flex items-center gap-1.5 font-bold text-muted-foreground">
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    CHECKING…
+                  </span>
+                ) : (
+                  <span className={`flex items-center gap-1.5 font-bold ${gatewayOk ? 'text-success' : 'text-destructive'}`}>
+                    {gatewayOk ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+                    {gatewayOk ? 'CONNECTED' : 'DISCONNECTED'}
+                  </span>
+                )
               }
               accent={
-                <Badge className={`text-[10px] font-bold ${gatewayOk ? 'bg-success/15 text-success border-success/30' : 'bg-destructive/15 text-destructive border-destructive/30'}`}>
-                  {gatewayOk ? 'OK' : 'ERR'}
+                <Badge className={`text-[10px] font-bold ${gatewayUnknown ? 'bg-muted text-muted-foreground border-border' : gatewayOk ? 'bg-success/15 text-success border-success/30' : 'bg-destructive/15 text-destructive border-destructive/30'}`}>
+                  {gatewayUnknown ? '…' : gatewayOk ? 'OK' : 'ERR'}
                 </Badge>
               }
             />

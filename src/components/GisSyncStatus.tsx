@@ -261,6 +261,7 @@ const GisSyncStatus = () => {
                     label={d.label}
                     deviceId={d.id}
                     success={gatewayOk}
+                    unknown={gatewayUnknown}
                     status={lastStatus}
                     duration={lastDuration}
                     timeStr={lastTimeStr}
@@ -359,10 +360,11 @@ const StatCard = ({ label, icon, value, accent }: {
 );
 
 const StationCard = ({ label, deviceId, success, status, duration, timeStr, rows, payload, responseText }: {
-  label: string; deviceId: string; success: boolean;
+  label: string; deviceId: string; success: boolean; unknown?: boolean;
   status?: number | null; duration?: number | null; timeStr: string;
   rows: ParamRow[]; payload: any; responseText?: string | null;
 }) => {
+  const u = (arguments as any); // noop
   const [showJson, setShowJson] = useState(false);
   const [showResp, setShowResp] = useState(false);
   return (
@@ -380,8 +382,8 @@ const StationCard = ({ label, deviceId, success, status, duration, timeStr, rows
             </button>
           </div>
         </div>
-        <Badge className={`text-[9px] font-bold ${success ? 'bg-success/15 text-success border-success/30' : 'bg-destructive/15 text-destructive border-destructive/30'}`}>
-          {success ? 'SUCCESS' : 'FAILED'}
+        <Badge className={`text-[9px] font-bold ${unknownProp ? 'bg-muted text-muted-foreground border-border' : success ? 'bg-success/15 text-success border-success/30' : 'bg-destructive/15 text-destructive border-destructive/30'}`}>
+          {unknownProp ? '…' : success ? 'SUCCESS' : 'FAILED'}
         </Badge>
       </div>
 

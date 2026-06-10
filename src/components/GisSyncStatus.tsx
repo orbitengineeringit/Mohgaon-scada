@@ -367,7 +367,7 @@ const StationCard = ({ label, deviceId, success, unknown: unknownProp, status, d
   const [showJson, setShowJson] = useState(false);
   const [showResp, setShowResp] = useState(false);
   return (
-    <div className="w-[300px] shrink-0 rounded-xl border bg-card overflow-hidden flex flex-col">
+    <div className="w-[260px] sm:w-[300px] shrink-0 rounded-xl border bg-card overflow-hidden flex flex-col">
       <div className="px-3 py-2 border-b flex items-center justify-between bg-muted/30">
         <div className="min-w-0">
           <div className="text-[11px] font-bold tracking-wide truncate">{label}</div>

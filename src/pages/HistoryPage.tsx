@@ -6,6 +6,10 @@ import GlobalFilterBar, { GlobalFilters, AssetFilter } from '@/components/Global
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Progress } from '@/components/ui/progress';
+import { useScada } from '@/contexts/ScadaContext';
+import ExcelJS from 'exceljs';
 import { 
   Download, 
   FileSpreadsheet, 
@@ -212,10 +216,19 @@ const HistoryPage: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState<{
+    open: boolean;
+    phase: 'estimating' | 'fetching' | 'building' | 'done';
+    fetched: number;
+    total: number;
+    estSec: number;
+    startedAt: number;
+  }>({ open: false, phase: 'estimating', fetched: 0, total: 0, estSec: 0, startedAt: 0 });
   const [autoRefresh, setAutoRefresh] = useState(false);
   const autoRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const { toast } = useToast();
+  const { plantName } = useScada();
 
   const pageSize = PAGE_SIZES[globalFilters.density];
   const totalPages = Math.ceil(totalCount / pageSize);
@@ -310,72 +323,221 @@ const HistoryPage: React.FC = () => {
     if (newPage >= 1 && newPage <= totalPages) fetchLogs(newPage);
   }, [totalPages, fetchLogs]);
 
-  const exportToCSV = useCallback(async () => {
+  const exportToExcel = useCallback(async () => {
     if (!globalFilters.startDate || !globalFilters.endDate) return;
     setIsExporting(true);
+    const startedAt = Date.now();
+    setExportProgress({ open: true, phase: 'estimating', fetched: 0, total: 0, estSec: 0, startedAt });
     try {
       const startTime = startOfDay(globalFilters.startDate).toISOString();
       const endTime = endOfDay(globalFilters.endDate).toISOString();
       const sectionFilters = getSectionFilters();
       const ohtPrefixes = getOhtTagPrefixes();
+      const useOhtFilter = ohtPrefixes.length > 0 && sectionFilters.includes('oht') && !globalFilters.assets.includes('intake') && !globalFilters.assets.includes('wtp');
+      const ohtOr = useOhtFilter ? ohtPrefixes.map(p => `tag_id.like.${p}%`).join(',') : null;
 
-      // Paginated export to handle large datasets
-      const PAGE_SIZE = 1000;
-      let allData: HistorianLog[] = [];
-      let page = 0;
-      let hasMore = true;
+      const applyFilters = (q: any) => {
+        let r = q.gte('timestamp', startTime).lte('timestamp', endTime);
+        if (sectionFilters.length > 0) r = r.in('section', sectionFilters);
+        if (ohtOr) r = r.or(ohtOr);
+        return r;
+      };
 
-      while (hasMore) {
-        let query = supabase.from('historian_logs')
-          .select(`id, tag_id, section, value, timestamp, tag_config:tag_config_id (label, unit)`)
-          .gte('timestamp', startTime).lte('timestamp', endTime)
-          .order('timestamp', { ascending: false })
-          .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-        if (sectionFilters.length > 0) query = query.in('section', sectionFilters);
-        if (ohtPrefixes.length > 0 && sectionFilters.includes('oht') && !globalFilters.assets.includes('intake') && !globalFilters.assets.includes('wtp')) {
-          const ohtFilter = ohtPrefixes.map(p => `tag_id.like.${p}%`).join(',');
-          query = query.or(ohtFilter);
-        }
-        const { data, error } = await query;
-        if (error) throw error;
-        if (data && data.length > 0) {
-          allData = [...allData, ...(data as unknown as HistorianLog[])];
-          page++;
-          hasMore = data.length === PAGE_SIZE;
-        } else {
-          hasMore = false;
-        }
+      // Phase 1: count + estimate
+      let countQ = supabase.from('historian_logs').select('*', { count: 'exact', head: true });
+      countQ = applyFilters(countQ);
+      const { count: total, error: countErr } = await countQ;
+      if (countErr) throw countErr;
+      const totalCountVal = total || 0;
+      // Estimate: ~3500 rows/sec end-to-end on average connection
+      const estSec = Math.max(2, Math.ceil(totalCountVal / 3500));
+      setExportProgress(p => ({ ...p, phase: 'fetching', total: totalCountVal, estSec }));
+
+      if (totalCountVal === 0) {
+        setExportProgress(p => ({ ...p, open: false }));
+        toast({ title: 'No Records', description: 'No data to export for the selected range.' });
+        return;
       }
 
-      const headers = ['Timestamp', 'Section', 'Label', 'Value', 'Unit'];
-      const csvRows = [headers.join(',')];
-      allData.forEach(log => {
-        const isPump = log.tag_id.includes('Pump');
-        csvRows.push([
-          format(new Date(log.timestamp), 'yyyy-MM-dd HH:mm:ss'),
-          log.section.toUpperCase(),
-          `"${log.tag_config?.label || 'N/A'}"`,
-          isPump ? (Number(log.value) >= 1 ? 'ON' : 'OFF') : log.value.toFixed(2),
-          log.tag_config?.unit || '',
-        ].join(','));
+      // Phase 2: parallel paginated fetch (8 pages concurrent)
+      const PAGE = 1000;
+      const totalPages = Math.ceil(totalCountVal / PAGE);
+      const CONCURRENCY = 6;
+      const allData: HistorianLog[] = new Array(totalCountVal);
+      let fetchedSoFar = 0;
+      let nextPage = 0;
+
+      const worker = async () => {
+        while (true) {
+          const pageIdx = nextPage++;
+          if (pageIdx >= totalPages) return;
+          const from = pageIdx * PAGE;
+          const to = from + PAGE - 1;
+          let q = supabase.from('historian_logs')
+            .select(`id, tag_id, section, value, timestamp, tag_config:tag_config_id (label, unit)`)
+            .order('timestamp', { ascending: false })
+            .range(from, to);
+          q = applyFilters(q);
+          const { data, error } = await q;
+          if (error) throw error;
+          if (data) {
+            for (let i = 0; i < data.length; i++) allData[from + i] = data[i] as unknown as HistorianLog;
+            fetchedSoFar += data.length;
+            setExportProgress(p => ({ ...p, fetched: fetchedSoFar }));
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
+
+      // Phase 3: build workbook
+      setExportProgress(p => ({ ...p, phase: 'building' }));
+      const wb = new ExcelJS.Workbook();
+      wb.creator = plantName;
+      wb.created = new Date();
+      const ws = wb.addWorksheet('Historical Records', {
+        views: [{ state: 'frozen', ySplit: 4, showGridLines: false }],
       });
 
-      const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      ws.columns = [
+        { key: 'ts', width: 22 },
+        { key: 'section', width: 14 },
+        { key: 'sensor', width: 14 },
+        { key: 'label', width: 32 },
+        { key: 'value', width: 14 },
+        { key: 'unit', width: 10 },
+      ];
+
+      // Row 1: Title banner
+      ws.mergeCells('A1:F1');
+      const titleCell = ws.getCell('A1');
+      titleCell.value = `💧  ${plantName.toUpperCase()}  —  HISTORICAL RECORDS`;
+      titleCell.font = { name: 'Segoe UI', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
+      titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+      titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0E7490' } };
+      ws.getRow(1).height = 38;
+
+      // Row 2: Period / records / generated info
+      ws.mergeCells('A2:F2');
+      const infoCell = ws.getCell('A2');
+      const startStr = format(globalFilters.startDate, 'd MMM yyyy');
+      const endStr = format(globalFilters.endDate, 'd MMM yyyy');
+      const genStr = format(new Date(), 'd MMM yyyy HH:mm');
+      infoCell.value = `📅 Period: ${startStr}  →  ${endStr}     📊 Records: ${totalCountVal.toLocaleString()}     🕒 Generated: ${genStr}`;
+      infoCell.font = { name: 'Segoe UI', size: 11, bold: true, color: { argb: 'FF1F2937' } };
+      infoCell.alignment = { horizontal: 'center', vertical: 'middle' };
+      infoCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF9C3' } };
+      ws.getRow(2).height = 26;
+
+      // Row 3 spacer
+      ws.getRow(3).height = 6;
+
+      // Row 4: Header
+      const headerRow = ws.getRow(4);
+      const headers = ['⏱  Timestamp', '🏭  Section', '🔧  Sensor Type', '🏷  Label / Tag', '📈  Value', '⚠  Unit'];
+      const headerColors = ['FF2563EB', 'FFDC2626', 'FF7C3AED', 'FF059669', 'FFEA580C', 'FFCA8A04'];
+      headers.forEach((h, i) => {
+        const c = headerRow.getCell(i + 1);
+        c.value = h;
+        c.font = { name: 'Segoe UI', size: 11, bold: true, color: { argb: 'FF' + headerColors[i].slice(2) } };
+        c.alignment = { horizontal: i === 4 ? 'right' : 'left', vertical: 'middle' };
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF064E3B' } };
+        c.border = {
+          top: { style: 'thin', color: { argb: 'FF334155' } },
+          bottom: { style: 'medium', color: { argb: 'FF334155' } },
+        };
+      });
+      headerRow.height = 26;
+      ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4, column: 6 } };
+
+      // Data rows
+      const sectionFill: Record<string, string> = {
+        oht: 'FFECFDF5',
+        intake: 'FFEFF6FF',
+        wtp: 'FFFFFBEB',
+      };
+      const sectionFont: Record<string, string> = {
+        oht: 'FF047857',
+        intake: 'FF1D4ED8',
+        wtp: 'FFB45309',
+      };
+
+      allData.forEach((log, idx) => {
+        if (!log) return;
+        const isPump = log.tag_id.includes('Pump');
+        const label = log.tag_config?.label || log.tag_id;
+        const normalized = (label + ' ' + log.tag_id).toLowerCase();
+        let sensorType = 'Other';
+        if (normalized.includes('pump')) sensorType = 'Pump';
+        else if (normalized.includes('level') || normalized.includes('-lt')) sensorType = 'Level';
+        else if (normalized.includes('pressure') || normalized.includes('-pt')) sensorType = 'Pressure';
+        else if (normalized.includes('totalizer')) sensorType = 'Totalizer';
+        else if (normalized.includes('flow') || normalized.includes('-ft')) sensorType = 'Flow';
+        else if (normalized.includes('ph')) sensorType = 'pH';
+        else if (normalized.includes('turbidity')) sensorType = 'Turbidity';
+        else if (normalized.includes('chlorine')) sensorType = 'Chlorine';
+        else if (normalized.includes('kw') || normalized.includes('energy')) sensorType = 'Energy';
+
+        const valueOut = isPump ? (Number(log.value) >= 1 ? 'ON' : 'OFF') : Number(Number(log.value).toFixed(2));
+
+        const row = ws.addRow({
+          ts: format(new Date(log.timestamp), 'yyyy-MM-dd HH:mm:ss'),
+          section: log.section.toUpperCase(),
+          sensor: sensorType,
+          label,
+          value: valueOut,
+          unit: log.tag_config?.unit || '',
+        });
+
+        const sec = log.section.toLowerCase();
+        const bg = sectionFill[sec] || (idx % 2 === 0 ? 'FFF8FAFC' : 'FFFFFFFF');
+        const secFg = sectionFont[sec] || 'FF334155';
+
+        row.eachCell({ includeEmpty: true }, (cell, col) => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
+          cell.font = { name: 'Segoe UI', size: 10, color: { argb: 'FF1F2937' } };
+          cell.alignment = { vertical: 'middle', horizontal: col === 5 ? 'right' : 'left' };
+          cell.border = { bottom: { style: 'hair', color: { argb: 'FFE5E7EB' } } };
+        });
+        // Section column bold colored
+        const secCell = row.getCell(2);
+        secCell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: secFg } };
+        // Sensor column bold colored
+        const sensorCell = row.getCell(3);
+        sensorCell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: secFg } };
+        // Value
+        const valCell = row.getCell(5);
+        if (typeof valueOut === 'number') {
+          valCell.numFmt = '#,##0.00';
+          valCell.font = { name: 'Consolas', size: 11, bold: true, color: { argb: 'FF111827' } };
+        } else {
+          valCell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: valueOut === 'ON' ? 'FF059669' : 'FFDC2626' } };
+        }
+        // Unit italic muted
+        const unitCell = row.getCell(6);
+        unitCell.font = { name: 'Segoe UI', size: 9, italic: true, color: { argb: 'FF6B7280' } };
+      });
+
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const link = document.createElement('a');
-      link.setAttribute('href', URL.createObjectURL(blob));
-      link.setAttribute('download', `scada_history_${format(globalFilters.startDate!, 'yyyyMMdd')}_${format(globalFilters.endDate!, 'yyyyMMdd')}.csv`);
-      link.style.visibility = 'hidden';
+      link.href = URL.createObjectURL(blob);
+      link.download = `scada_history_${format(globalFilters.startDate!, 'yyyyMMdd')}_${format(globalFilters.endDate!, 'yyyyMMdd')}.xlsx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      toast({ title: 'Export Complete', description: `Exported ${allData.length} records.` });
+      URL.revokeObjectURL(link.href);
+
+      setExportProgress(p => ({ ...p, phase: 'done' }));
+      setTimeout(() => setExportProgress(p => ({ ...p, open: false })), 1200);
+      toast({ title: 'Export Complete', description: `Exported ${totalCountVal.toLocaleString()} records to Excel.` });
     } catch (error) {
-      logError('History.exportCSV', error);
-      toast({ title: 'Export Failed', description: 'Failed to generate CSV.', variant: 'destructive' });
+      logError('History.exportExcel', error);
+      setExportProgress(p => ({ ...p, open: false }));
+      toast({ title: 'Export Failed', description: 'Failed to generate Excel file.', variant: 'destructive' });
     } finally {
       setIsExporting(false);
     }
-  }, [globalFilters.startDate, globalFilters.endDate, getSectionFilters, toast]);
+  }, [globalFilters.startDate, globalFilters.endDate, globalFilters.assets, getSectionFilters, getOhtTagPrefixes, toast, plantName]);
 
   const paginationInfo = useMemo(() => {
     if (totalPages <= 1) return null;
@@ -417,12 +579,12 @@ const HistoryPage: React.FC = () => {
             {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading...</> : <><Database className="mr-2 h-4 w-4" />Fetch Data</>}
           </Button>
           <Button 
-            onClick={exportToCSV} 
+            onClick={exportToExcel} 
             disabled={isExporting || totalCount === 0} 
             variant="outline" 
             className="flex-1 sm:flex-none border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5 hover:bg-emerald-500/10 hover:border-emerald-500 font-semibold shadow-sm transition-all active:scale-[0.98] duration-200"
           >
-            {isExporting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Exporting...</> : <><FileSpreadsheet className="mr-2 h-4 w-4" />Export CSV</>}
+            {isExporting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Exporting...</> : <><FileSpreadsheet className="mr-2 h-4 w-4" />Export Excel</>}
           </Button>
           <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto justify-center glass border border-border/40 px-3.5 py-1.5 rounded-xl shadow-sm">
             <Switch id="auto-refresh" checked={autoRefresh} onCheckedChange={setAutoRefresh} disabled={totalCount === 0} />
@@ -699,8 +861,92 @@ const HistoryPage: React.FC = () => {
         </Card>
       </main>
       <StatusBar />
+      <ExportProgressDialog state={exportProgress} />
     </div>
   );
 };
 
 export default HistoryPage;
+
+interface ExportProgressState {
+  open: boolean;
+  phase: 'estimating' | 'fetching' | 'building' | 'done';
+  fetched: number;
+  total: number;
+  estSec: number;
+  startedAt: number;
+}
+
+const ExportProgressDialog: React.FC<{ state: ExportProgressState }> = ({ state }) => {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!state.open) return;
+    const id = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(id);
+  }, [state.open]);
+
+  const elapsedSec = state.startedAt ? (now - state.startedAt) / 1000 : 0;
+  const pct = state.total > 0 ? Math.min(99, Math.round((state.fetched / state.total) * 100)) : 0;
+  const displayPct = state.phase === 'done' ? 100 : state.phase === 'building' ? Math.max(pct, 95) : pct;
+
+  // Recompute ETA from actual throughput once we have samples
+  let remainSec = Math.max(0, state.estSec - elapsedSec);
+  if (state.fetched > 50 && state.total > 0 && state.phase === 'fetching') {
+    const rate = state.fetched / Math.max(0.5, elapsedSec);
+    remainSec = Math.max(0, (state.total - state.fetched) / Math.max(1, rate));
+  }
+  const formatSec = (s: number) => s < 60 ? `${Math.ceil(s)}s` : `${Math.floor(s / 60)}m ${Math.ceil(s % 60)}s`;
+
+  const phaseLabel: Record<ExportProgressState['phase'], string> = {
+    estimating: '🔍 Estimating size…',
+    fetching: '📥 Fetching data',
+    building: '🎨 Building Excel file',
+    done: '✅ Done',
+  };
+
+  return (
+    <Dialog open={state.open}>
+      <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FileSpreadsheet className="h-5 w-5 text-emerald-500" />
+            Exporting to Excel
+          </DialogTitle>
+          <DialogDescription>
+            {state.phase === 'estimating'
+              ? 'Calculating how much data needs to be exported…'
+              : `${state.fetched.toLocaleString()} of ${state.total.toLocaleString()} records`}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 pt-1">
+          <Progress value={displayPct} className="h-2" />
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-medium text-foreground">{phaseLabel[state.phase]}</span>
+            <span className="font-mono text-muted-foreground">{displayPct}%</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            <div className="rounded-lg border border-border/40 bg-muted/30 p-2.5">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Approx. time</div>
+              <div className="text-sm font-bold text-foreground mt-0.5">
+                {state.estSec ? `~${formatSec(state.estSec)}` : '—'}
+              </div>
+            </div>
+            <div className="rounded-lg border border-border/40 bg-muted/30 p-2.5">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                {state.phase === 'done' ? 'Elapsed' : 'Remaining'}
+              </div>
+              <div className="text-sm font-bold text-foreground mt-0.5">
+                {state.phase === 'done' ? formatSec(elapsedSec) : (state.phase === 'fetching' ? formatSec(remainSec) : '…')}
+              </div>
+            </div>
+          </div>
+          {state.phase === 'fetching' && state.total > 5000 && (
+            <p className="text-[11px] text-muted-foreground text-center">
+              Tip: larger date ranges take longer — please keep this tab open.
+            </p>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};

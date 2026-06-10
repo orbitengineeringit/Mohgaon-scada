@@ -26,7 +26,7 @@ const getIconForSensor = (id: string) => {
 };
 
 // Connection status types
-type ConnectionStatus = 'connected' | 'standby' | 'no-data';
+type ConnectionStatus = 'connected' | 'no-data';
 
 const IntakeSensorCard: React.FC<IntakeSensorCardProps> = ({ tag, index }) => {
   const { updateTagAlarmSettings } = useScada();
@@ -108,13 +108,6 @@ const IntakeSensorCard: React.FC<IntakeSensorCardProps> = ({ tag, index }) => {
             <span className="text-success">Connected</span>
           </span>
         );
-      case 'standby':
-        return (
-          <span className="status-indicator bg-warning/10 text-warning border-warning/30">
-            <WifiOff className="w-3 h-3" />
-            <span>Standby</span>
-          </span>
-        );
       case 'no-data':
         return (
           <span className="status-indicator bg-destructive/10 text-destructive border-destructive/30 animate-pulse">
@@ -137,7 +130,6 @@ const IntakeSensorCard: React.FC<IntakeSensorCardProps> = ({ tag, index }) => {
           opacity-0 animate-fade-in transition-all duration-300
           hover:ring-2 hover:ring-primary/30 hover:shadow-lg
           ${connectionStatus === 'no-data' ? 'border-destructive/50' : ''}
-          ${connectionStatus === 'standby' ? 'border-warning/50' : ''}
         `}
         style={{ animationDelay: `${index * 50}ms` }}
         onClick={() => setShowTrends(true)}

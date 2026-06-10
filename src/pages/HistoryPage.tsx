@@ -861,6 +861,7 @@ const HistoryPage: React.FC = () => {
         </Card>
       </main>
       <StatusBar />
+      <ExportProgressDialog state={exportProgress} />
     </div>
   );
 };

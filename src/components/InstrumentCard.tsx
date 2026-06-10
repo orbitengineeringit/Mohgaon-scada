@@ -17,8 +17,9 @@ import WtpPump from './instruments/WtpPump';
 import AlarmSettingsModal, { AlarmSettings } from './AlarmSettingsModal';
 import SensorTrendModal from './SensorTrendModal';
 import { Button } from '@/components/ui/button';
-import { Bell, TrendingUp, Wifi, WifiOff } from 'lucide-react';
+import { Bell, TrendingUp, Wifi, WifiOff, CircleSlash } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useTagConnection } from '@/hooks/useTagConnection';
 
 interface InstrumentCardProps {
   tag: TagData;
@@ -43,14 +44,11 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
     }
   }, [tag.value]);
 
-  // Derive connection status: binary ON (data flowing) or OFF (no data).
-  // No "waiting/standby" state — MQTT either delivers or it doesn't.
-  // Instant ON/OFF: derived purely from upstream tag.status. Zero values are
-  // still "connected" (the value 0 is shown, not hidden as offline).
-  const connectionStatus = useMemo<'connected' | 'no-data'>(
-    () => (tag.status === 'disconnected' ? 'no-data' : 'connected'),
-    [tag.status]
-  );
+  // Single shared connection rule (see useTagConnection).
+  // 'connected' | 'no-data' | 'stale' — derived purely from tag.status / freshness,
+  // never from the numeric value (zero stays connected).
+  const connection = useTagConnection(tag);
+  const isOffline = connection !== 'connected';
 
   const handleAlarmSave = useCallback((settings: AlarmSettings) => {
     updateTagAlarmSettings(section, tag.id, settings);
@@ -164,25 +162,16 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
     }
   };
 
-  // Instrument health detection
-  const instrumentHealth = useMemo(() => {
-    if (tag.source !== 'mqtt') return 'unknown';
-    if (connectionStatus === 'no-data') return 'offline';
-    // Stuck detection: if value hasn't changed for a while despite receiving data
-    if (connectionStatus === 'connected' && tag.value === 0 && !isDigital && !isTotalizer) return 'zero-reading';
-    if (connectionStatus === 'connected') return 'healthy';
-    if (connectionStatus === 'standby') return 'standby';
-    return 'unknown';
-  }, [connectionStatus, tag.source, tag.value, isDigital, isTotalizer]);
-
   const getHealthBadge = () => {
-    // Always show an ON/OFF status so operators know if data is flowing,
-    // regardless of whether the value is zero or the tag source is mqtt/sim.
+    // Three-state badge so operators can tell hard-OFF from "stale/no contact yet".
     let label: string;
     let className: string;
-    if (connectionStatus === 'connected') {
+    if (connection === 'connected') {
       label = 'ON';
       className = 'bg-success/15 text-success border border-success/30';
+    } else if (connection === 'stale') {
+      label = 'STALE';
+      className = 'bg-warning/15 text-warning border border-warning/30 animate-pulse';
     } else {
       label = 'OFF';
       className = 'bg-destructive/15 text-destructive border border-destructive/30 animate-pulse';
@@ -194,20 +183,22 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
     );
   };
 
+  const ConnIcon: React.FC<{ className?: string }> = ({ className }) => {
+    if (connection === 'connected') return <Wifi className={`${className} text-success`} />;
+    if (connection === 'stale') return <CircleSlash className={`${className} text-warning animate-pulse`} />;
+    return <WifiOff className={`${className} text-destructive animate-pulse`} />;
+  };
+
   if (isDigital) {
     return (
       <div
-        className={`premium-card rounded-xl p-3 sm:p-4 relative overflow-visible opacity-0 animate-fade-in flex flex-col h-full ${connectionStatus === 'no-data' ? 'border-destructive/50' : ''}`}
+        className={`premium-card rounded-xl p-3 sm:p-4 relative overflow-visible opacity-0 animate-fade-in flex flex-col h-full ${connection === 'no-data' ? 'border-destructive/50' : ''} ${connection === 'stale' ? 'border-warning/50' : ''}`}
         style={{ animationDelay: `${index * 40}ms` }}
       >
         <div className="relative z-10 flex flex-col flex-1">
           <div className="flex items-center justify-between mb-1.5 sm:mb-2">
             <div className="flex items-center gap-1 min-w-0">
-              {connectionStatus === 'connected' ? (
-                <Wifi className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-success shrink-0" />
-              ) : (
-                <WifiOff className="w-2.5 h-2.5 sm:w-3 sm:h-3 shrink-0 text-destructive animate-pulse" />
-              )}
+              <ConnIcon className="w-2.5 h-2.5 sm:w-3 sm:h-3 shrink-0" />
               <span className="text-[10px] sm:text-xs text-muted-foreground font-medium truncate">{sensor.label}</span>
             </div>
             {getHealthBadge()}
@@ -216,7 +207,7 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
             {renderInstrument()}
           </div>
           <div className="flex items-center gap-1 mt-1">
-            {connectionStatus === 'connected' && <div className="w-1.5 h-1.5 rounded-full bg-success pulse-live shrink-0" />}
+            {connection === 'connected' && <div className="w-1.5 h-1.5 rounded-full bg-success pulse-live shrink-0" />}
             <span className="text-[9px] sm:text-[10px] text-muted-foreground font-mono truncate">{tag.timestamp.toLocaleTimeString()}</span>
           </div>
         </div>
@@ -231,7 +222,8 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
           premium-card rounded-xl p-2 sm:p-3 relative overflow-visible cursor-pointer
           opacity-0 animate-fade-in
           flex flex-col h-full
-          ${connectionStatus === 'no-data' ? 'border-destructive/50' : ''}
+          ${connection === 'no-data' ? 'border-destructive/50' : ''}
+          ${connection === 'stale' ? 'border-warning/50' : ''}
         `}
         style={{ animationDelay: `${index * 40}ms` }}
         onClick={() => setShowTrends(true)}
@@ -239,11 +231,7 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
         <div className="relative z-10 flex flex-col flex-1">
           <div className="flex items-center justify-between mb-1.5 sm:mb-2 shrink-0">
             <div className="flex items-center gap-1 min-w-0">
-              {connectionStatus === 'connected' ? (
-                <Wifi className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-success shrink-0" />
-              ) : (
-                <WifiOff className="w-2.5 h-2.5 sm:w-3 sm:h-3 shrink-0 text-destructive animate-pulse" />
-              )}
+              <ConnIcon className="w-2.5 h-2.5 sm:w-3 sm:h-3 shrink-0" />
               <span className="text-[10px] sm:text-xs text-muted-foreground font-medium truncate">{sensor.label}</span>
               {getHealthBadge()}
             </div>
@@ -291,7 +279,7 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
             )}
 
             <div className="flex items-center gap-1 mt-1">
-              {connectionStatus === 'connected' && <div className="w-1.5 h-1.5 rounded-full bg-success pulse-live shrink-0" />}
+              {connection === 'connected' && <div className="w-1.5 h-1.5 rounded-full bg-success pulse-live shrink-0" />}
               <span className="text-[9px] sm:text-[10px] text-muted-foreground font-mono truncate">{tag.timestamp.toLocaleTimeString()}</span>
             </div>
           </div>

@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { useScada } from '@/contexts/ScadaContext';
 import SensorStatusStrip from './SensorStatusStrip';
+import { useTagConnection } from '@/hooks/useTagConnection';
 
 /**
  * Intake Well - Process Simulation View
@@ -26,10 +27,7 @@ const IntakeProcessSimulation: React.FC = () => {
   const totalizerVal = totalizerTag?.value ?? 0;
   const kwVal = kwTag?.value ?? 0;
 
-  const kwLive = (() => {
-    if (!kwTag) return false;
-    return kwTag.status !== 'disconnected';
-  })();
+  const kwLive = useTagConnection(kwTag) === 'connected';
 
   const pump1Running = pt1Val > 1.5;
   const pump2Running = pt2Val > 1.5;

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useScada, TagData } from '@/contexts/ScadaContext';
-import { Gauge, Droplets, Activity, Bell, Wifi, WifiOff, TrendingUp } from 'lucide-react';
+import { Gauge, Droplets, Activity, Bell, Wifi, WifiOff, TrendingUp, CircleSlash } from 'lucide-react';
 import AlarmSettingsModal, { AlarmSettings } from './AlarmSettingsModal';
 import SensorTrendModal from './SensorTrendModal';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { useTagConnection } from '@/hooks/useTagConnection';
 
 interface IntakeSensorCardProps {
   tag: TagData;
@@ -24,9 +25,6 @@ const getIconForSensor = (id: string) => {
     default: return Activity;
   }
 };
-
-// Connection status types
-type ConnectionStatus = 'connected' | 'no-data';
 
 const IntakeSensorCard: React.FC<IntakeSensorCardProps> = ({ tag, index }) => {
   const { updateTagAlarmSettings } = useScada();
@@ -45,10 +43,8 @@ const IntakeSensorCard: React.FC<IntakeSensorCardProps> = ({ tag, index }) => {
     }
   }, [tag.value]);
 
-  // Instant ON/OFF: derive purely from upstream tag.status, which useMqttTagSync
-  // flips within ~1s of MQTT going silent. Zero values stay "connected".
-  const connectionStatus: ConnectionStatus =
-    tag.status === 'disconnected' ? 'no-data' : 'connected';
+  // Single shared rule (see useTagConnection): 'connected' | 'no-data' | 'stale'.
+  const connectionStatus = useTagConnection(tag);
 
   const handleAlarmSettingsSave = (settings: AlarmSettings) => {
     updateTagAlarmSettings('intake', tag.id, settings);
@@ -99,13 +95,20 @@ const IntakeSensorCard: React.FC<IntakeSensorCardProps> = ({ tag, index }) => {
       }
     }
 
-    // For other sensors (Pressure, Flow) - show full status states
+    // For other sensors (Pressure, Flow) - show full status states.
     switch (connectionStatus) {
       case 'connected':
         return (
           <span className="status-indicator status-active">
             <Wifi className="w-3 h-3 text-success" />
             <span className="text-success">Connected</span>
+          </span>
+        );
+      case 'stale':
+        return (
+          <span className="status-indicator bg-warning/10 text-warning border-warning/30 animate-pulse">
+            <CircleSlash className="w-3 h-3" />
+            <span>Stale</span>
           </span>
         );
       case 'no-data':
@@ -130,6 +133,7 @@ const IntakeSensorCard: React.FC<IntakeSensorCardProps> = ({ tag, index }) => {
           opacity-0 animate-fade-in transition-all duration-300
           hover:ring-2 hover:ring-primary/30 hover:shadow-lg
           ${connectionStatus === 'no-data' ? 'border-destructive/50' : ''}
+          ${connectionStatus === 'stale' ? 'border-warning/50' : ''}
         `}
         style={{ animationDelay: `${index * 50}ms` }}
         onClick={() => setShowTrends(true)}

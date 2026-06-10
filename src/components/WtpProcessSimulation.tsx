@@ -550,7 +550,7 @@ const WtpProcessSimulation: React.FC = () => {
   const totVal = findTag('WTP-Totalizer')?.value ?? 0;
   const kwTag = findTag('WTP-KW');
   const kwVal = kwTag?.value ?? 0;
-  const kwLive = useTagConnection(kwTag) === 'connected';
+  const kwConnection = useTagConnection(kwTag);
 
   const pt1Val = findTag('WTP-PT1')?.value ?? 0;
   const pt2Val = findTag('WTP-PT2')?.value ?? 0;
@@ -1267,16 +1267,37 @@ const WtpProcessSimulation: React.FC = () => {
                   ))}
                 </svg>
                 <g transform={`translate(${ex + 5}, ${ey + 144})`}>
-                  <rect x={-28} y={0} width={56} height={16} rx={4}
-                    fill={kwLive ? 'hsl(var(--success) / 0.15)' : 'hsl(var(--destructive) / 0.15)'}
-                    stroke={kwLive ? 'hsl(var(--success))' : 'hsl(var(--destructive))'} strokeWidth="0.8" />
-                  <circle cx={-18} cy={8} r={2.5} fill={kwLive ? 'hsl(var(--success))' : 'hsl(var(--destructive))'}>
-                    <animate attributeName="opacity" values="1;0.4;1" dur={kwLive ? '1.6s' : '0.8s'} repeatCount="indefinite" />
-                  </circle>
-                  <text x={4} y={12} textAnchor="middle" fontSize="10" fontWeight="800" letterSpacing="1"
-                    fill={kwLive ? 'hsl(var(--success))' : 'hsl(var(--destructive))'}>
-                    {kwLive ? 'ON' : 'OFF'}
-                  </text>
+                  {(() => {
+                    let fill = 'hsl(var(--destructive) / 0.15)';
+                    let stroke = 'hsl(var(--destructive))';
+                    let text = 'OFF';
+                    let pulseDur = '0.8s';
+                    let isPulse = true;
+                    
+                    if (kwConnection === 'connected') {
+                      fill = 'hsl(var(--success) / 0.15)';
+                      stroke = 'hsl(var(--success))';
+                      text = 'ON';
+                      pulseDur = '1.6s';
+                    } else if (kwConnection === 'inactive') {
+                      fill = 'rgba(56, 189, 248, 0.15)';
+                      stroke = '#38bdf8';
+                      text = 'ZERO';
+                      isPulse = false;
+                    }
+                    
+                    return (
+                      <>
+                        <rect x={-28} y={0} width={56} height={16} rx={4} fill={fill} stroke={stroke} strokeWidth="0.8" />
+                        <circle cx={-18} cy={8} r={2.5} fill={stroke}>
+                          {isPulse && <animate attributeName="opacity" values="1;0.4;1" dur={pulseDur} repeatCount="indefinite" />}
+                        </circle>
+                        <text x={4} y={12} textAnchor="middle" fontSize="10" fontWeight="800" letterSpacing="1" fill={stroke}>
+                          {text}
+                        </text>
+                      </>
+                    );
+                  })()}
                 </g>
               </g>
             );

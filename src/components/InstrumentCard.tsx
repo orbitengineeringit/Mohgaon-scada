@@ -45,10 +45,8 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
   }, [tag.value]);
 
   // Single shared connection rule (see useTagConnection).
-  // 'connected' | 'no-data' | 'stale' — derived purely from tag.status / freshness,
-  // never from the numeric value (zero stays connected).
+  // 'connected' | 'inactive' | 'no-data' | 'stale'
   const connection = useTagConnection(tag);
-  const isOffline = connection !== 'connected';
 
   const handleAlarmSave = useCallback((settings: AlarmSettings) => {
     updateTagAlarmSettings(section, tag.id, settings);
@@ -163,12 +161,15 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
   };
 
   const getHealthBadge = () => {
-    // Three-state badge so operators can tell hard-OFF from "stale/no contact yet".
+    // Four-state badge so operators can tell ON, OFF, STALE, and ZERO.
     let label: string;
     let className: string;
     if (connection === 'connected') {
       label = 'ON';
       className = 'bg-success/15 text-success border border-success/30';
+    } else if (connection === 'inactive') {
+      label = 'ZERO';
+      className = 'bg-sky-500/15 text-sky-500 border border-sky-500/30';
     } else if (connection === 'stale') {
       label = 'STALE';
       className = 'bg-warning/15 text-warning border border-warning/30 animate-pulse';
@@ -185,6 +186,7 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
 
   const ConnIcon: React.FC<{ className?: string }> = ({ className }) => {
     if (connection === 'connected') return <Wifi className={`${className} text-success`} />;
+    if (connection === 'inactive') return <CircleSlash className={`${className} text-sky-500`} />;
     if (connection === 'stale') return <CircleSlash className={`${className} text-warning animate-pulse`} />;
     return <WifiOff className={`${className} text-destructive animate-pulse`} />;
   };
@@ -192,7 +194,7 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
   if (isDigital) {
     return (
       <div
-        className={`premium-card rounded-xl p-3 sm:p-4 relative overflow-visible opacity-0 animate-fade-in flex flex-col h-full ${connection === 'no-data' ? 'border-destructive/50' : ''} ${connection === 'stale' ? 'border-warning/50' : ''}`}
+        className={`premium-card rounded-xl p-3 sm:p-4 relative overflow-visible opacity-0 animate-fade-in flex flex-col h-full ${connection === 'no-data' ? 'border-destructive/50' : ''} ${connection === 'stale' ? 'border-warning/50' : ''} ${connection === 'inactive' ? 'border-sky-500/30' : ''}`}
         style={{ animationDelay: `${index * 40}ms` }}
       >
         <div className="relative z-10 flex flex-col flex-1">
@@ -224,6 +226,7 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
           flex flex-col h-full
           ${connection === 'no-data' ? 'border-destructive/50' : ''}
           ${connection === 'stale' ? 'border-warning/50' : ''}
+          ${connection === 'inactive' ? 'border-sky-500/30' : ''}
         `}
         style={{ animationDelay: `${index * 40}ms` }}
         onClick={() => setShowTrends(true)}

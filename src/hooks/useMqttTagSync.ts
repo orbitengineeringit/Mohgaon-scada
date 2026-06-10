@@ -94,7 +94,8 @@ export const useMqttTagSync = (
         setter(prev => prev.map(tag => {
           if (tag.source === 'mqtt' && tag.lastDataTime) {
             const elapsed = now.getTime() - tag.lastDataTime.getTime();
-            if (elapsed > DISCONNECT_TIMEOUT_MS && tag.status !== 'disconnected') {
+            const timeout = tag.section === 'intake' ? 6000 : tag.section === 'oht' ? 12000 : 20000;
+            if (elapsed > timeout && tag.status !== 'disconnected') {
               return { ...tag, status: 'disconnected' as const };
             }
           }

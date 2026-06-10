@@ -395,24 +395,24 @@ const HistoryPage: React.FC = () => {
       <div className="floating-orb bg-accent w-[250px] h-[250px] top-[40%] -right-10 opacity-[0.03] dark:opacity-[0.05]" />
       <div className="floating-orb bg-success w-[300px] h-[300px] -bottom-20 left-[30%] opacity-[0.03] dark:opacity-[0.05]" />
 
-      <main className="flex-1 container mx-auto px-4 py-6 md:py-8 relative z-10">
-        <div className="flex items-center gap-3.5 mb-6 md:mb-8 opacity-0 animate-fade-in">
-          <div className="p-3.5 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/20 border border-primary/20 shadow-md">
-            <Database className="h-6 w-6 text-primary animate-pulse" />
+      <main className="flex-1 container mx-auto px-3 sm:px-4 py-5 sm:py-6 md:py-8 relative z-10">
+        <div className="flex items-start sm:items-center gap-2.5 sm:gap-3.5 mb-5 sm:mb-6 md:mb-8 opacity-0 animate-fade-in">
+          <div className="p-2.5 sm:p-3.5 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/20 border border-primary/20 shadow-md shrink-0">
+            <Database className="h-5 w-5 sm:h-6 sm:w-6 text-primary animate-pulse" />
           </div>
-          <div>
-            <h2 className="text-xl md:text-2xl font-bold tracking-tight text-foreground bg-gradient-to-r from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-shadow-glow">Historical Telemetry</h2>
-            <p className="text-sm text-muted-foreground mt-0.5">Explore, query and export historical sensor data logs</p>
+          <div className="min-w-0">
+            <h2 className="text-lg sm:text-xl md:text-2xl font-bold tracking-tight text-foreground bg-gradient-to-r from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-shadow-glow">Historical Telemetry</h2>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">Explore, query and export historical sensor data logs</p>
           </div>
         </div>
 
         <GlobalFilterBar filters={globalFilters} onFiltersChange={setGlobalFilters} onApply={() => fetchLogs(1)} />
 
-        <div className="flex flex-wrap items-center gap-3 mb-5 opacity-0 animate-fade-in" style={{ animationDelay: '100ms' }}>
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-5 opacity-0 animate-fade-in" style={{ animationDelay: '100ms' }}>
           <Button 
             onClick={() => fetchLogs(1)} 
             disabled={isLoading} 
-            className="bg-gradient-to-r from-primary via-primary/95 to-cyan-500 hover:from-primary/95 hover:to-cyan-600 text-primary-foreground hover:shadow-lg hover:shadow-primary/20 border-0 font-semibold shadow-md transition-all active:scale-[0.98] duration-200"
+            className="flex-1 sm:flex-none bg-gradient-to-r from-primary via-primary/95 to-cyan-500 hover:from-primary/95 hover:to-cyan-600 text-primary-foreground hover:shadow-lg hover:shadow-primary/20 border-0 font-semibold shadow-md transition-all active:scale-[0.98] duration-200"
           >
             {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading...</> : <><Database className="mr-2 h-4 w-4" />Fetch Data</>}
           </Button>
@@ -420,11 +420,11 @@ const HistoryPage: React.FC = () => {
             onClick={exportToCSV} 
             disabled={isExporting || totalCount === 0} 
             variant="outline" 
-            className="border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5 hover:bg-emerald-500/10 hover:border-emerald-500 font-semibold shadow-sm transition-all active:scale-[0.98] duration-200"
+            className="flex-1 sm:flex-none border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5 hover:bg-emerald-500/10 hover:border-emerald-500 font-semibold shadow-sm transition-all active:scale-[0.98] duration-200"
           >
             {isExporting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Exporting...</> : <><FileSpreadsheet className="mr-2 h-4 w-4" />Export CSV</>}
           </Button>
-          <div className="flex items-center gap-2 ml-auto glass border border-border/40 px-3.5 py-1.5 rounded-xl shadow-sm">
+          <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto justify-center glass border border-border/40 px-3.5 py-1.5 rounded-xl shadow-sm">
             <Switch id="auto-refresh" checked={autoRefresh} onCheckedChange={setAutoRefresh} disabled={totalCount === 0} />
             <Label htmlFor="auto-refresh" className={cn("flex items-center gap-2 cursor-pointer text-sm font-semibold select-none", autoRefresh ? "text-primary" : "text-muted-foreground")}>
               <RefreshCw className={cn("h-4 w-4", autoRefresh && "animate-spin")} /> Auto-Refresh
@@ -436,18 +436,18 @@ const HistoryPage: React.FC = () => {
           {/* Accent top gradient line */}
           <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-primary via-accent to-success opacity-85 z-20" />
           
-          <CardHeader className="border-b border-border/40 pb-4 bg-muted/20">
-            <CardTitle className="text-lg font-bold flex items-center gap-2 text-foreground">
-              <Database className="h-5 w-5 text-primary animate-pulse" />
+          <CardHeader className="border-b border-border/40 pb-3 sm:pb-4 px-3 sm:px-6 pt-4 sm:pt-6 bg-muted/20">
+            <CardTitle className="text-base sm:text-lg font-bold flex flex-wrap items-center gap-x-2 gap-y-1 text-foreground">
+              <Database className="h-4 w-4 sm:h-5 sm:w-5 text-primary animate-pulse shrink-0" />
               Historical Records
               {totalCount > 0 && (
-                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 ml-2">
+                <span className="text-[10px] sm:text-xs font-semibold px-2 sm:px-2.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 sm:ml-2">
                   {totalCount.toLocaleString()} total
                 </span>
               )}
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-4 sm:p-6">
+          <CardContent className="p-2 sm:p-6">
             {isLoading && logs.length === 0 ? (
               <div className="rounded-xl border border-border/40 overflow-hidden shadow-inner bg-card/30">
                 <Table>
@@ -477,7 +477,7 @@ const HistoryPage: React.FC = () => {
               <>
                 <div className="rounded-xl border border-border/40 overflow-hidden shadow-inner bg-card/30">
                   <div className="max-h-[600px] overflow-auto">
-                    <Table>
+                    <Table className="min-w-[760px]">
                       <TableHeader className="sticky top-0 bg-secondary/80 backdrop-blur-md border-b border-border/50 z-10">
                         <TableRow className="hover:bg-transparent border-0">
                           <TableHead className="text-xs uppercase tracking-wider text-muted-foreground font-bold py-4 pl-6 border-0">Timestamp</TableHead>

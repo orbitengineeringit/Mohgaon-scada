@@ -74,6 +74,13 @@ const OhtSensorCard: React.FC<OhtSensorCardProps> = ({ tag, index }) => {
             <span className="text-success">Connected</span>
           </span>
         );
+      case 'stale':
+        return (
+          <span className="status-indicator bg-warning/10 text-warning border-warning/30 animate-pulse">
+            <CircleSlash className="w-3 h-3" />
+            <span>Stale</span>
+          </span>
+        );
       case 'no-data':
         return (
           <span className="status-indicator bg-destructive/10 text-destructive border-destructive/30 animate-pulse">
@@ -96,6 +103,7 @@ const OhtSensorCard: React.FC<OhtSensorCardProps> = ({ tag, index }) => {
           opacity-0 animate-fade-in transition-all duration-300
           hover:ring-2 hover:ring-primary/30 hover:shadow-lg
           ${connectionStatus === 'no-data' ? 'border-destructive/50' : ''}
+          ${connectionStatus === 'stale' ? 'border-warning/50' : ''}
         `}
         style={{ animationDelay: `${index * 50}ms` }}
         onClick={() => setShowTrends(true)}

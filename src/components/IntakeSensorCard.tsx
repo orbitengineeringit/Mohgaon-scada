@@ -95,13 +95,20 @@ const IntakeSensorCard: React.FC<IntakeSensorCardProps> = ({ tag, index }) => {
       }
     }
 
-    // For other sensors (Pressure, Flow) - show full status states
+    // For other sensors (Pressure, Flow) - show full status states.
     switch (connectionStatus) {
       case 'connected':
         return (
           <span className="status-indicator status-active">
             <Wifi className="w-3 h-3 text-success" />
             <span className="text-success">Connected</span>
+          </span>
+        );
+      case 'stale':
+        return (
+          <span className="status-indicator bg-warning/10 text-warning border-warning/30 animate-pulse">
+            <CircleSlash className="w-3 h-3" />
+            <span>Stale</span>
           </span>
         );
       case 'no-data':
@@ -126,6 +133,7 @@ const IntakeSensorCard: React.FC<IntakeSensorCardProps> = ({ tag, index }) => {
           opacity-0 animate-fade-in transition-all duration-300
           hover:ring-2 hover:ring-primary/30 hover:shadow-lg
           ${connectionStatus === 'no-data' ? 'border-destructive/50' : ''}
+          ${connectionStatus === 'stale' ? 'border-warning/50' : ''}
         `}
         style={{ animationDelay: `${index * 50}ms` }}
         onClick={() => setShowTrends(true)}

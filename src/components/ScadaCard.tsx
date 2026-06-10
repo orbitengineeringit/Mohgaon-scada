@@ -73,6 +73,12 @@ const ScadaCard = forwardRef<HTMLDivElement, ScadaCardProps>(({ tag, section, in
             <Wifi className="w-3 h-3 text-success" />
           </span>
         );
+      case 'stale':
+        return (
+          <span className="status-indicator bg-warning/10 text-warning animate-pulse">
+            <CircleSlash className="w-3 h-3" />
+          </span>
+        );
       case 'no-data':
         return (
           <span className="status-indicator bg-destructive/10 text-destructive animate-pulse">
@@ -93,6 +99,7 @@ const ScadaCard = forwardRef<HTMLDivElement, ScadaCardProps>(({ tag, section, in
           ${configMode ? 'config-active' : ''}
           ${!tag.isActive ? 'opacity-60' : ''}
           ${connectionStatus === 'no-data' ? 'border-destructive/40' : ''}
+          ${connectionStatus === 'stale' ? 'border-warning/40' : ''}
         `}
         style={{ animationDelay: `${index * 50}ms` }}
         onClick={() => tag.isActive && setShowTrends(true)}

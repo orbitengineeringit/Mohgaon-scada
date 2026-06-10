@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useScada, TagData } from '@/contexts/ScadaContext';
-import { Gauge, Droplets, Activity, Bell, Wifi, WifiOff, TrendingUp } from 'lucide-react';
+import { Gauge, Droplets, Activity, Bell, Wifi, WifiOff, TrendingUp, CircleSlash } from 'lucide-react';
 import AlarmSettingsModal, { AlarmSettings } from './AlarmSettingsModal';
 import SensorTrendModal from './SensorTrendModal';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { useTagConnection } from '@/hooks/useTagConnection';
 
 interface IntakeSensorCardProps {
   tag: TagData;
@@ -24,9 +25,6 @@ const getIconForSensor = (id: string) => {
     default: return Activity;
   }
 };
-
-// Connection status types
-type ConnectionStatus = 'connected' | 'no-data';
 
 const IntakeSensorCard: React.FC<IntakeSensorCardProps> = ({ tag, index }) => {
   const { updateTagAlarmSettings } = useScada();
@@ -45,10 +43,8 @@ const IntakeSensorCard: React.FC<IntakeSensorCardProps> = ({ tag, index }) => {
     }
   }, [tag.value]);
 
-  // Instant ON/OFF: derive purely from upstream tag.status, which useMqttTagSync
-  // flips within ~1s of MQTT going silent. Zero values stay "connected".
-  const connectionStatus: ConnectionStatus =
-    tag.status === 'disconnected' ? 'no-data' : 'connected';
+  // Single shared rule (see useTagConnection): 'connected' | 'no-data' | 'stale'.
+  const connectionStatus = useTagConnection(tag);
 
   const handleAlarmSettingsSave = (settings: AlarmSettings) => {
     updateTagAlarmSettings('intake', tag.id, settings);

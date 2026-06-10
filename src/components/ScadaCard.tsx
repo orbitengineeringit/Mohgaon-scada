@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, forwardRef } from 'react';
 import { useScada, TagData } from '@/contexts/ScadaContext';
-import { Activity, Gauge, Thermometer, Droplets, Zap, Settings2, AlertCircle, Bell, Wifi, WifiOff, TrendingUp } from 'lucide-react';
+import { Activity, Gauge, Thermometer, Droplets, Zap, Settings2, AlertCircle, Bell, Wifi, WifiOff, TrendingUp, CircleSlash } from 'lucide-react';
 import AlarmSettingsModal, { AlarmSettings } from './AlarmSettingsModal';
 import SensorTrendModal from './SensorTrendModal';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { useTagConnection } from '@/hooks/useTagConnection';
 
 interface ScadaCardProps {
   tag: TagData;
@@ -24,8 +25,6 @@ const getIconForTag = (label: string) => {
   if (lowerLabel.includes('power') || lowerLabel.includes('kw') || lowerLabel.includes('energy')) return Zap;
   return Activity;
 };
-
-type ConnectionStatus = 'connected' | 'no-data';
 
 const ScadaCard = forwardRef<HTMLDivElement, ScadaCardProps>(({ tag, section, index }, ref) => {
   const { configMode, updateTagAlarmSettings } = useScada();
@@ -43,9 +42,8 @@ const ScadaCard = forwardRef<HTMLDivElement, ScadaCardProps>(({ tag, section, in
     }
   }, [tag.value]);
 
-  // Instant ON/OFF: derive purely from upstream tag.status. Zero values stay "connected".
-  const connectionStatus: ConnectionStatus =
-    tag.status === 'disconnected' ? 'no-data' : 'connected';
+  // Single shared rule (see useTagConnection): 'connected' | 'no-data' | 'stale'.
+  const connectionStatus = useTagConnection(tag);
 
   const handleAlarmSettingsSave = (settings: AlarmSettings) => {
     updateTagAlarmSettings(section, tag.id, settings);

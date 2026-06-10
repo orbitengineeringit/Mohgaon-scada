@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
  * Invokes the `gis-sync` edge function on an interval and stores
  * the last payload/response in localStorage for the UI to show.
  */
-export const useGisAutoSync = (intervalMs = 30_000) => {
+export const useGisAutoSync = (intervalMs = 60 * 60 * 1000) => {
   const inFlight = useRef(false);
 
   useEffect(() => {

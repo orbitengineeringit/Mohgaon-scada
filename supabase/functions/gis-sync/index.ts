@@ -39,6 +39,24 @@ const mld = (m3hr: number | null | undefined): number =>
 const num = (v: number | null | undefined): number =>
   v == null || isNaN(Number(v)) ? 0 : Number(v);
 
+// Cache the cron secret across warm invocations to avoid extra vault reads.
+let cachedCronSecret: string | null = null;
+async function getCronSecret(client: ReturnType<typeof createClient>): Promise<string | null> {
+  if (cachedCronSecret) return cachedCronSecret;
+  const { data, error } = await client
+    .from("gis_config")
+    .select("cron_secret")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data?.cron_secret) {
+    console.error("getCronSecret failed:", error?.message);
+    return null;
+  }
+  cachedCronSecret = data.cron_secret as string;
+  return cachedCronSecret;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -46,28 +64,43 @@ Deno.serve(async (req) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-  // --- AuthN/AuthZ: require a signed-in user (any authenticated user can trigger sync) ---
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-  const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: authHeader } },
-  });
-  const { data: { user }, error: userErr } = await userClient.auth.getUser();
-  if (userErr || !user) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  // Service-role client for reading credentials + writing audit log
+  // Service-role client for reading credentials, vault, and writing audit log
   const supabase = createClient(
     supabaseUrl,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
+
+  // --- AuthN/AuthZ ---
+  // Allow either: (a) signed-in user (browser trigger) OR
+  // (b) internal pg_cron call carrying the shared secret in x-cron-key header.
+  const cronKey = req.headers.get("x-cron-key");
+  const expectedCronKey = await getCronSecret(supabase);
+  const isCron = !!cronKey && !!expectedCronKey && cronKey === expectedCronKey;
+  console.log("auth-check", {
+    hasCronKey: !!cronKey,
+    hasExpected: !!expectedCronKey,
+    expectedLen: expectedCronKey?.length ?? 0,
+    cronKeyLen: cronKey?.length ?? 0,
+    isCron,
+  });
+
+  if (!isCron) {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user }, error: userErr } = await userClient.auth.getUser();
+    if (userErr || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }
 
   let endpoint = "";
   let requestPayload: any = null;

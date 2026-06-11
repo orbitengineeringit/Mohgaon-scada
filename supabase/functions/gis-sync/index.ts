@@ -39,6 +39,21 @@ const mld = (m3hr: number | null | undefined): number =>
 const num = (v: number | null | undefined): number =>
   v == null || isNaN(Number(v)) ? 0 : Number(v);
 
+// Cache the cron secret across warm invocations to avoid extra vault reads.
+let cachedCronSecret: string | null = null;
+async function getCronSecret(client: ReturnType<typeof createClient>): Promise<string | null> {
+  if (cachedCronSecret) return cachedCronSecret;
+  const { data, error } = await client
+    .schema("vault")
+    .from("decrypted_secrets")
+    .select("decrypted_secret")
+    .eq("name", "gis_cron_secret")
+    .maybeSingle();
+  if (error || !data) return null;
+  cachedCronSecret = (data as any).decrypted_secret as string;
+  return cachedCronSecret;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -46,12 +61,18 @@ Deno.serve(async (req) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
+  // Service-role client for reading credentials, vault, and writing audit log
+  const supabase = createClient(
+    supabaseUrl,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  );
+
   // --- AuthN/AuthZ ---
   // Allow either: (a) signed-in user (browser trigger) OR
-  // (b) internal cron call carrying the service-role key in x-cron-key header.
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  // (b) internal pg_cron call carrying the shared secret in x-cron-key header.
   const cronKey = req.headers.get("x-cron-key");
-  const isCron = !!cronKey && cronKey === serviceRoleKey;
+  const expectedCronKey = await getCronSecret(supabase);
+  const isCron = !!cronKey && !!expectedCronKey && cronKey === expectedCronKey;
 
   if (!isCron) {
     const authHeader = req.headers.get("Authorization");
@@ -70,12 +91,6 @@ Deno.serve(async (req) => {
       });
     }
   }
-
-  // Service-role client for reading credentials + writing audit log
-  const supabase = createClient(
-    supabaseUrl,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  );
 
   let endpoint = "";
   let requestPayload: any = null;

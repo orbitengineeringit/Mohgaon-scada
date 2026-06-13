@@ -430,6 +430,34 @@ const HistoryPage: React.FC = () => {
       };
       await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
 
+      // Phase 3a: downsample by chosen interval (per-tag bucket = keep latest sample in bucket)
+      let processed: HistorianLog[] = allData.filter(Boolean);
+      if (exportInterval !== 'all') {
+        const bucketMs = INTERVAL_MS[exportInterval];
+        const latestByBucket = new Map<string, HistorianLog>();
+        for (const log of processed) {
+          const t = new Date(log.timestamp).getTime();
+          const bucket = Math.floor(t / bucketMs);
+          const key = `${log.tag_id}|${bucket}`;
+          const existing = latestByBucket.get(key);
+          if (!existing || new Date(existing.timestamp).getTime() < t) {
+            latestByBucket.set(key, log);
+          }
+        }
+        processed = Array.from(latestByBucket.values());
+      }
+
+      // Phase 3b: group sort — Intake → WTP → OHT-1 → OHT-2 → OHT-3, then tag, then time asc
+      processed.sort((a, b) => {
+        const oa = getSectionOrder(a.section, a.tag_id);
+        const ob = getSectionOrder(b.section, b.tag_id);
+        if (oa !== ob) return oa - ob;
+        if (a.tag_id !== b.tag_id) return a.tag_id.localeCompare(b.tag_id);
+        return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+      });
+
+      const exportCount = processed.length;
+
       // Phase 3: build workbook
       setExportProgress(p => ({ ...p, phase: 'building' }));
       const wb = new ExcelJS.Workbook();
@@ -464,6 +492,10 @@ const HistoryPage: React.FC = () => {
       const endStr = format(globalFilters.endDate, 'd MMM yyyy');
       const genStr = format(new Date(), 'd MMM yyyy HH:mm');
       infoCell.value = `📅 Period: ${startStr}  →  ${endStr}     📊 Records: ${totalCountVal.toLocaleString()}     🕒 Generated: ${genStr}`;
+      // Append interval note if downsampled
+      if (exportInterval !== 'all') {
+        infoCell.value = `📅 Period: ${startStr}  →  ${endStr}     📊 ${exportCount.toLocaleString()} of ${totalCountVal.toLocaleString()} records  •  Interval: ${INTERVAL_LABEL[exportInterval]}     🕒 Generated: ${genStr}`;
+      }
       infoCell.font = { name: 'Segoe UI', size: 11, bold: true, color: { argb: 'FF1F2937' } };
       infoCell.alignment = { horizontal: 'center', vertical: 'middle' };
       infoCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF9C3' } };
@@ -502,7 +534,7 @@ const HistoryPage: React.FC = () => {
         wtp: 'FFB45309',
       };
 
-      allData.forEach((log, idx) => {
+      processed.forEach((log, idx) => {
         if (!log) return;
         const isPump = log.tag_id.includes('Pump');
         const label = log.tag_config?.label || log.tag_id;
@@ -522,7 +554,7 @@ const HistoryPage: React.FC = () => {
 
         const row = ws.addRow({
           ts: format(new Date(log.timestamp), 'yyyy-MM-dd HH:mm:ss'),
-          section: log.section.toUpperCase(),
+          section: getDisplaySection(log.section, log.tag_id),
           sensor: sensorType,
           label,
           value: valueOut,
@@ -562,7 +594,8 @@ const HistoryPage: React.FC = () => {
       const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = `scada_history_${format(globalFilters.startDate!, 'yyyyMMdd')}_${format(globalFilters.endDate!, 'yyyyMMdd')}.xlsx`;
+      const intervalSuffix = exportInterval === 'all' ? '' : `_${exportInterval}`;
+      link.download = `scada_history_${format(globalFilters.startDate!, 'yyyyMMdd')}_${format(globalFilters.endDate!, 'yyyyMMdd')}${intervalSuffix}.xlsx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -570,7 +603,7 @@ const HistoryPage: React.FC = () => {
 
       setExportProgress(p => ({ ...p, phase: 'done' }));
       setTimeout(() => setExportProgress(p => ({ ...p, open: false })), 1200);
-      toast({ title: 'Export Complete', description: `Exported ${totalCountVal.toLocaleString()} records to Excel.` });
+      toast({ title: 'Export Complete', description: `Exported ${exportCount.toLocaleString()} records to Excel${exportInterval !== 'all' ? ` (${INTERVAL_LABEL[exportInterval]})` : ''}.` });
     } catch (error) {
       logError('History.exportExcel', error);
       setExportProgress(p => ({ ...p, open: false }));
@@ -578,7 +611,7 @@ const HistoryPage: React.FC = () => {
     } finally {
       setIsExporting(false);
     }
-  }, [globalFilters.startDate, globalFilters.endDate, globalFilters.assets, getSectionFilters, getOhtTagPrefixes, toast, plantName]);
+  }, [globalFilters.startDate, globalFilters.endDate, globalFilters.assets, getSectionFilters, getOhtTagPrefixes, toast, plantName, exportInterval]);
 
   const paginationInfo = useMemo(() => {
     if (totalPages <= 1) return null;

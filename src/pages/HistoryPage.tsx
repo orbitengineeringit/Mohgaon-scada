@@ -58,7 +58,7 @@ const INTERVAL_LABEL: Record<ExportInterval, string> = {
 const getDisplaySection = (section: string, tagId: string): string => {
   const sec = section.toLowerCase();
   if (sec === 'oht') {
-    const m = tagId.match(/^OHT\s*([0-9]+)/i);
+    const m = tagId.match(/^OHT[-_\s]*([0-9]+)/i);
     if (m) return `OHT-${m[1]}`;
     return 'OHT';
   }
@@ -71,7 +71,7 @@ const getSectionOrder = (section: string, tagId: string): number => {
   if (sec === 'intake') return 0;
   if (sec === 'wtp') return 1;
   if (sec === 'oht') {
-    const m = tagId.match(/^OHT\s*([0-9]+)/i);
+    const m = tagId.match(/^OHT[-_\s]*([0-9]+)/i);
     const n = m ? parseInt(m[1], 10) : 99;
     return 1 + n; // OHT1 -> 2, OHT2 -> 3, OHT3 -> 4
   }
@@ -783,6 +783,7 @@ const HistoryPage: React.FC = () => {
                           const isWtp = log.section === 'wtp';
                           const isIntake = log.section === 'intake';
                           const isOht = log.section === 'oht';
+                          const displaySection = getDisplaySection(log.section, log.tag_id);
                           
                           // Row dynamic left border and soft background gradient based on section
                           let rowBorderClass = "border-l-4 border-l-transparent";
@@ -868,7 +869,7 @@ const HistoryPage: React.FC = () => {
                                 {isOht && (
                                   <span className="inline-flex items-center px-2.5 py-1 text-xs font-bold rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 backdrop-blur-sm shadow-sm uppercase tracking-wide">
                                     <OhtSvg className="h-3.5 w-3.5 mr-1.5 text-emerald-500 dark:text-emerald-400" />
-                                    OHT
+                                    {displaySection}
                                   </span>
                                 )}
                                 {!isWtp && !isIntake && !isOht && (

@@ -330,6 +330,8 @@ const HistoryPage: React.FC = () => {
       let dataQuery = supabase.from('historian_logs')
         .select(`id, tag_id, section, value, timestamp, tag_config:tag_config_id (label, unit)`)
         .gte('timestamp', startTime).lte('timestamp', endTime)
+        .order('section', { ascending: true })
+        .order('tag_id', { ascending: true })
         .order('timestamp', { ascending: false })
         .range(offset, offset + pageSize - 1);
       if (sectionFilters.length > 0) dataQuery = dataQuery.in('section', sectionFilters);
@@ -450,13 +452,13 @@ const HistoryPage: React.FC = () => {
         processed = Array.from(latestByBucket.values());
       }
 
-      // Phase 3b: group sort — Intake → WTP → OHT-1 → OHT-2 → OHT-3, then tag, then time asc
+      // Phase 3b: group sort — Intake → WTP → OHT-1 → OHT-2 → OHT-3, then tag, then time DESC (latest first)
       processed.sort((a, b) => {
         const oa = getSectionOrder(a.section, a.tag_id);
         const ob = getSectionOrder(b.section, b.tag_id);
         if (oa !== ob) return oa - ob;
         if (a.tag_id !== b.tag_id) return a.tag_id.localeCompare(b.tag_id);
-        return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
       });
 
       const exportCount = processed.length;
@@ -644,6 +646,17 @@ const HistoryPage: React.FC = () => {
     return { pages, from: ((currentPage - 1) * pageSize) + 1, to: Math.min(currentPage * pageSize, totalCount) };
   }, [totalPages, currentPage, totalCount, pageSize]);
 
+  // Sort current page rows for display: Intake → WTP → OHT-1/2/3, then tag, then latest first
+  const sortedLogs = useMemo(() => {
+    return [...logs].sort((a, b) => {
+      const oa = getSectionOrder(a.section, a.tag_id);
+      const ob = getSectionOrder(b.section, b.tag_id);
+      if (oa !== ob) return oa - ob;
+      if (a.tag_id !== b.tag_id) return a.tag_id.localeCompare(b.tag_id);
+      return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+    });
+  }, [logs]);
+
   return (
     <div className="min-h-screen flex flex-col bg-background grid-pattern relative overflow-hidden">
       {/* Floating gradient decorative orbs for premium depth */}
@@ -759,7 +772,7 @@ const HistoryPage: React.FC = () => {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {logs.map((log) => {
+                        {sortedLogs.map((log) => {
                           const isPump = log.tag_id.includes('Pump');
                           const isWtp = log.section === 'wtp';
                           const isIntake = log.section === 'intake';

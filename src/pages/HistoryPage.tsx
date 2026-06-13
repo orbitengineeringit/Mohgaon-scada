@@ -660,6 +660,21 @@ const HistoryPage: React.FC = () => {
           >
             {isExporting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Exporting...</> : <><FileSpreadsheet className="mr-2 h-4 w-4" />Export Excel</>}
           </Button>
+          <div className="flex items-center gap-2 glass border border-border/40 px-3 py-1 rounded-xl shadow-sm">
+            <Label className="text-xs font-semibold text-muted-foreground whitespace-nowrap">Interval</Label>
+            <Select value={exportInterval} onValueChange={(v) => setExportInterval(v as ExportInterval)}>
+              <SelectTrigger className="h-8 w-[150px] border-0 bg-transparent text-sm font-semibold focus:ring-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All data</SelectItem>
+                <SelectItem value="1m">Every 1 minute</SelectItem>
+                <SelectItem value="30m">Every 30 minutes</SelectItem>
+                <SelectItem value="1h">Every 1 hour</SelectItem>
+                <SelectItem value="1d">Every 1 day</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto justify-center glass border border-border/40 px-3.5 py-1.5 rounded-xl shadow-sm">
             <Switch id="auto-refresh" checked={autoRefresh} onCheckedChange={setAutoRefresh} disabled={totalCount === 0} />
             <Label htmlFor="auto-refresh" className={cn("flex items-center gap-2 cursor-pointer text-sm font-semibold select-none", autoRefresh ? "text-primary" : "text-muted-foreground")}>

@@ -330,6 +330,8 @@ const HistoryPage: React.FC = () => {
       let dataQuery = supabase.from('historian_logs')
         .select(`id, tag_id, section, value, timestamp, tag_config:tag_config_id (label, unit)`)
         .gte('timestamp', startTime).lte('timestamp', endTime)
+        .order('section', { ascending: true })
+        .order('tag_id', { ascending: true })
         .order('timestamp', { ascending: false })
         .range(offset, offset + pageSize - 1);
       if (sectionFilters.length > 0) dataQuery = dataQuery.in('section', sectionFilters);

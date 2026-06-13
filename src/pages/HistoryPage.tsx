@@ -268,12 +268,13 @@ const HistoryPage: React.FC = () => {
   }>({ open: false, phase: 'estimating', fetched: 0, total: 0, estSec: 0, startedAt: 0 });
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [exportInterval, setExportInterval] = useState<ExportInterval>('all');
+  const [pageSizeOverride, setPageSizeOverride] = useState<number | null>(null);
   const autoRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const { toast } = useToast();
   const { plantName } = useScada();
 
-  const pageSize = PAGE_SIZES[globalFilters.density];
+  const pageSize = pageSizeOverride ?? PAGE_SIZES[globalFilters.density];
   const totalPages = Math.ceil(totalCount / pageSize);
 
   const getSectionFilters = useCallback((): ('intake' | 'oht' | 'wtp')[] => {

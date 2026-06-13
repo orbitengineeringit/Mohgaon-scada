@@ -450,13 +450,13 @@ const HistoryPage: React.FC = () => {
         processed = Array.from(latestByBucket.values());
       }
 
-      // Phase 3b: group sort — Intake → WTP → OHT-1 → OHT-2 → OHT-3, then tag, then time asc
+      // Phase 3b: group sort — Intake → WTP → OHT-1 → OHT-2 → OHT-3, then tag, then time DESC (latest first)
       processed.sort((a, b) => {
         const oa = getSectionOrder(a.section, a.tag_id);
         const ob = getSectionOrder(b.section, b.tag_id);
         if (oa !== ob) return oa - ob;
         if (a.tag_id !== b.tag_id) return a.tag_id.localeCompare(b.tag_id);
-        return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
       });
 
       const exportCount = processed.length;

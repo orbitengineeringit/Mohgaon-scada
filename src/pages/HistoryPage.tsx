@@ -58,7 +58,7 @@ const INTERVAL_LABEL: Record<ExportInterval, string> = {
 const getDisplaySection = (section: string, tagId: string): string => {
   const sec = section.toLowerCase();
   if (sec === 'oht') {
-    const m = tagId.match(/^OHT\s*([0-9]+)/i);
+    const m = tagId.match(/^OHT[-_\s]*([0-9]+)/i);
     if (m) return `OHT-${m[1]}`;
     return 'OHT';
   }
@@ -71,7 +71,7 @@ const getSectionOrder = (section: string, tagId: string): number => {
   if (sec === 'intake') return 0;
   if (sec === 'wtp') return 1;
   if (sec === 'oht') {
-    const m = tagId.match(/^OHT\s*([0-9]+)/i);
+    const m = tagId.match(/^OHT[-_\s]*([0-9]+)/i);
     const n = m ? parseInt(m[1], 10) : 99;
     return 1 + n; // OHT1 -> 2, OHT2 -> 3, OHT3 -> 4
   }

@@ -330,9 +330,9 @@ const HistoryPage: React.FC = () => {
       let dataQuery = supabase.from('historian_logs')
         .select(`id, tag_id, section, value, timestamp, tag_config:tag_config_id (label, unit)`)
         .gte('timestamp', startTime).lte('timestamp', endTime)
+        .order('timestamp', { ascending: false })
         .order('section', { ascending: true })
         .order('tag_id', { ascending: true })
-        .order('timestamp', { ascending: false })
         .range(offset, offset + pageSize - 1);
       if (sectionFilters.length > 0) dataQuery = dataQuery.in('section', sectionFilters);
       if (ohtPrefixes.length > 0 && sectionFilters.includes('oht') && !globalFilters.assets.includes('intake') && !globalFilters.assets.includes('wtp')) {
@@ -452,13 +452,16 @@ const HistoryPage: React.FC = () => {
         processed = Array.from(latestByBucket.values());
       }
 
-      // Phase 3b: group sort — Intake → WTP → OHT-1 → OHT-2 → OHT-3, then tag, then time DESC (latest first)
+      // Phase 3b: timestamp-first grouping — latest time on top, and within each
+      // timestamp bucket (rounded to the minute) order by Intake → WTP → OHT-1/2/3 → tag.
       processed.sort((a, b) => {
+        const ta = Math.floor(new Date(a.timestamp).getTime() / 60000);
+        const tb = Math.floor(new Date(b.timestamp).getTime() / 60000);
+        if (ta !== tb) return tb - ta;
         const oa = getSectionOrder(a.section, a.tag_id);
         const ob = getSectionOrder(b.section, b.tag_id);
         if (oa !== ob) return oa - ob;
-        if (a.tag_id !== b.tag_id) return a.tag_id.localeCompare(b.tag_id);
-        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+        return a.tag_id.localeCompare(b.tag_id);
       });
 
       const exportCount = processed.length;
@@ -646,14 +649,17 @@ const HistoryPage: React.FC = () => {
     return { pages, from: ((currentPage - 1) * pageSize) + 1, to: Math.min(currentPage * pageSize, totalCount) };
   }, [totalPages, currentPage, totalCount, pageSize]);
 
-  // Sort current page rows for display: Intake → WTP → OHT-1/2/3, then tag, then latest first
+  // Sort current page rows for display: latest timestamp first, then within the
+  // same minute Intake → WTP → OHT-1/2/3 → tag (so user sees all sections together per time).
   const sortedLogs = useMemo(() => {
     return [...logs].sort((a, b) => {
+      const ta = Math.floor(new Date(a.timestamp).getTime() / 60000);
+      const tb = Math.floor(new Date(b.timestamp).getTime() / 60000);
+      if (ta !== tb) return tb - ta;
       const oa = getSectionOrder(a.section, a.tag_id);
       const ob = getSectionOrder(b.section, b.tag_id);
       if (oa !== ob) return oa - ob;
-      if (a.tag_id !== b.tag_id) return a.tag_id.localeCompare(b.tag_id);
-      return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+      return a.tag_id.localeCompare(b.tag_id);
     });
   }, [logs]);
 

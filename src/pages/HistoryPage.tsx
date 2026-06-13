@@ -609,7 +609,10 @@ const HistoryPage: React.FC = () => {
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
       const intervalSuffix = exportInterval === 'all' ? '' : `_${exportInterval}`;
-      link.download = `scada_history_${format(globalFilters.startDate!, 'yyyyMMdd')}_${format(globalFilters.endDate!, 'yyyyMMdd')}${intervalSuffix}.xlsx`;
+      const fileStart = format(globalFilters.startDate!, 'd MMM yyyy');
+      const fileEnd = format(globalFilters.endDate!, 'd MMM yyyy');
+      const safePlant = (plantName || 'SCADA').replace(/[\\/:*?"<>|]/g, '');
+      link.download = `${safePlant} Scada History ${fileStart} to ${fileEnd}${intervalSuffix}.xlsx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

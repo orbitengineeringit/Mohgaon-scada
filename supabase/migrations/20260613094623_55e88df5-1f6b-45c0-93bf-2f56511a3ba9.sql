@@ -1,0 +1,2 @@
+CREATE POLICY "auth insert historian_logs" ON public.historian_logs FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "auth insert tag_config" ON public.tag_config FOR INSERT TO authenticated WITH CHECK (true);

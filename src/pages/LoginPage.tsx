@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Lock, User, AlertCircle, Sun, Moon } from 'lucide-react';
 import orbitLogo from '@/assets/orbit-logo-optimized.png';
+import loginBg from '@/assets/sign in page background.jpg';
 import { useLogoPreload } from '@/hooks/useLogoPreload';
 
 const LoginPage = () => {
@@ -10,7 +11,7 @@ const LoginPage = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const imagesReady = useLogoPreload([orbitLogo]);
+  const imagesReady = useLogoPreload([orbitLogo, loginBg]);
 
   const [isDark, setIsDark] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -65,9 +66,15 @@ const LoginPage = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background grid-pattern relative overflow-hidden px-4">
-      <div className="floating-orb w-96 h-96 bg-primary -top-40 -left-40" />
-      <div className="floating-orb w-80 h-80 bg-accent top-1/2 -right-32" style={{ animationDelay: '7s' }} />
+    <div 
+      className="min-h-screen flex items-center justify-center bg-cover bg-center bg-no-repeat relative overflow-hidden px-4"
+      style={{ backgroundImage: `url(${loginBg})` }}
+    >
+      {/* Background Overlay */}
+      <div className="absolute inset-0 bg-background/20 dark:bg-background/50 grid-pattern pointer-events-none" />
+
+      <div className="floating-orb w-96 h-96 bg-primary -top-40 -left-40 z-0" />
+      <div className="floating-orb w-80 h-80 bg-accent top-1/2 -right-32 z-0" style={{ animationDelay: '7s' }} />
 
       <button onClick={toggleTheme}
         className="absolute top-4 right-4 sm:top-8 sm:right-8 p-2.5 rounded-xl bg-secondary/80 hover:bg-secondary transition-all duration-200 border border-border/50 hover:scale-105 active:scale-95 z-50 shadow-sm"

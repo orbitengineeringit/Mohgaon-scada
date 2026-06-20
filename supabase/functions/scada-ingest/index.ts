@@ -175,14 +175,21 @@ async function collectSnapshot(cfg: MqttConfig | null): Promise<ParsedMessage[]>
       keepalive: 15,
     });
     let settled = false;
+    // earlyExitTimer: starts a 5s settle window after first message arrives.
+    // This lets other active topics reply without waiting for the full 25s hard timeout,
+    // while still not blocking on devices that are offline.
+    let earlyExitTimer: ReturnType<typeof setTimeout> | null = null;
+
     const finish = (err?: Error) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      if (earlyExitTimer) clearTimeout(earlyExitTimer);
       try { client.end(true); } catch { /* ignore */ }
       if (err && messages.length === 0) reject(err);
       else resolve(messages);
     };
+    // Hard timeout: 25 seconds — absolute ceiling regardless of device state
     const timer = setTimeout(() => finish(), 25_000);
 
     client.on("connect", () => {
@@ -196,7 +203,17 @@ async function collectSnapshot(cfg: MqttConfig | null): Promise<ParsedMessage[]>
         messages.push({ topic, payload: combined, timestamp: new Date(), ...mapped });
         seenTopics.add(topic);
       }
-      if (seenTopics.size >= topics.length) finish();
+      // Exit immediately if all subscribed topics have responded
+      if (seenTopics.size >= topics.length) {
+        finish();
+        return;
+      }
+      // After the FIRST message arrives, start a 5-second settling window.
+      // Devices that are online will reply within a few seconds; offline ones won't.
+      // This avoids always waiting the full 25s when some sections are offline.
+      if (seenTopics.size === 1 && !earlyExitTimer) {
+        earlyExitTimer = setTimeout(() => finish(), 5_000);
+      }
     });
     client.on("error", (err) => finish(err as Error));
     client.on("close", () => { if (!settled && messages.length > 0) finish(); });

@@ -23,12 +23,13 @@ interface TagUpdate {
 // Typical SCADA publish cadence is 1-2s, so a 3s grace avoids false-OFF
 // while keeping the visible flip near-instant.
 const DISCONNECT_TIMEOUT_MS = 3000;
-// Historian persistence policy:
-//  - Normal data: save every 5 minutes per tag (keeps DB small)
-//  - Abnormal fluctuation: save immediately if value changes > ABNORMAL_DELTA_PCT of range since last save
+// Historian persistence policy (BROWSER — critical events only):
+//  - Interval saves (every 5 min): handled by backend scada-ingest cron (source: backend:5min).
+//    The browser NO LONGER writes routine interval data to the DB. This keeps the
+//    free-tier storage usage low and eliminates duplicate writes.
+//  - Abnormal fluctuation: save immediately if value changes > ABNORMAL_DELTA_PCT of range
 //  - Alarm crossing: save immediately if value crosses high/low setpoint
 //  - Digital state change (pump on/off): save immediately
-const SAVE_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const ABNORMAL_DELTA_PCT = 0.12;        // 12% of sensor range
 const FLUSH_INTERVAL_MS = 30 * 1000;    // batch-write queue to DB every 30s
 
@@ -256,7 +257,9 @@ export const useMqttTagSync = (
       });
 
       if (shouldLog) {
-        // ---- Smart save decision: 5-min interval OR abnormal change OR alarm crossing ----
+        // ---- Smart save decision: critical events only (interval saves are backend's job) ----
+        // The scada-ingest Edge Function runs every 5 min via pg_cron and saves routine data.
+        // Here we ONLY save truly important events that happen between cron intervals.
         const key = `${section}-${sensorId}`;
         const now = Date.now();
         const prev = lastSaved.current.get(key);
@@ -268,17 +271,15 @@ export const useMqttTagSync = (
         const deltaPct = prev ? Math.abs(displayValue - prev.value) / range : 1;
 
         let reason: TagUpdate['reason'] | null = null;
-        if (!prev) {
-          reason = 'interval';
-        } else if (sensor.type !== 'analog' && displayValue !== prev.value) {
-          reason = 'state_change';                     // pump/valve on↔off
-        } else if (abnormalNow && !prev.inAlarm) {
-          reason = 'alarm';                            // entered unsafe process zone
-        } else if (deltaPct >= ABNORMAL_DELTA_PCT) {
-          reason = 'abnormal';                         // sudden fluctuation
-        } else if (now - prev.at >= SAVE_INTERVAL_MS) {
-          reason = 'interval';                         // normal 5-min checkpoint
+        if (sensor.type !== 'analog' && prev && displayValue !== prev.value) {
+          reason = 'state_change';                     // pump/valve on↔off — save immediately
+        } else if (abnormalNow && (!prev || !prev.inAlarm)) {
+          reason = 'alarm';                            // entered unsafe process zone — save immediately
+        } else if (prev && deltaPct >= ABNORMAL_DELTA_PCT) {
+          reason = 'abnormal';                         // sudden ≥12% fluctuation — save immediately
         }
+        // NOTE: First-time-seen ('interval' for !prev) and regular 5-min interval saves
+        // are intentionally removed — the backend scada-ingest cron handles these.
 
         if (reason) {
           pendingLogs.current.push({
@@ -286,6 +287,9 @@ export const useMqttTagSync = (
             section: section as 'oht' | 'intake' | 'wtp',
             topic, reason,
           });
+          lastSaved.current.set(key, { value: displayValue, at: now, inAlarm: abnormalNow });
+        } else if (!prev) {
+          // Track state for future delta comparisons even when not saving
           lastSaved.current.set(key, { value: displayValue, at: now, inAlarm: abnormalNow });
         }
       }

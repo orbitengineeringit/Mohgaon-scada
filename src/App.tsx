@@ -93,16 +93,15 @@ const AuthenticatedApp = () => (
               <Route path="/history" element={<Suspense fallback={<PageSkeleton />}><HistoryPage /></Suspense>} />
               <Route path="/alarms" element={<Suspense fallback={<PageSkeleton />}><AlarmsPage /></Suspense>} />
               <Route path="/settings" element={<Suspense fallback={<PageSkeleton />}><SettingsPage /></Suspense>} />
-              <Route path="/assistant" element={<Suspense fallback={<PageSkeleton />}><AssistantPage /></Suspense>} />
+              {/* <Route path="/assistant" element={<Suspense fallback={<PageSkeleton />}><AssistantPage /></Suspense>} /> */}
               
               {/* Analytics Routes */}
               <Route path="/analytics/intake" element={<IntakeAnalyticsPage />} />
               <Route path="/analytics/wtp" element={<WtpAnalyticsPage />} />
               <Route path="/analytics/oht" element={<OhtAnalyticsPage />} />
-
               <Route path="*" element={<Suspense fallback={<PageSkeleton />}><NotFound /></Suspense>} />
             </Routes>
-            <FloatingAssistantButton />
+            {/* <FloatingAssistantButton /> */}
           </BrowserRouter>
         </TooltipProvider>
       </MqttScadaBridge>

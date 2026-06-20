@@ -1,3 +1,9 @@
+# Environment variables (NEVER commit these)
+.env
+.env.local
+.env.production.local
+.env.*.local
+
 # Logs
 logs
 *.log

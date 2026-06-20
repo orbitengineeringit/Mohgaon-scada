@@ -134,7 +134,8 @@ export const AlarmProvider: React.FC<{ children: ReactNode }> = ({ children }) =
                 return;
             }
 
-            // Trigger email notification via edge function
+            // Trigger email notification via edge function (disabled as Resend is removed)
+            /*
             try {
                 await supabase.functions.invoke('send-alarm-email', {
                     body: {
@@ -154,6 +155,7 @@ export const AlarmProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             } catch (emailError) {
                 logError('AlarmContext.addAlarm.email', emailError);
             }
+            */
 
         } catch (error) {
             logError('AlarmContext.addAlarm', error);

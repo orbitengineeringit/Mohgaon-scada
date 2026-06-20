@@ -1,4 +1,7 @@
-project_id = "bnyojzfjxjljewjplhmi"
+project_id = "kpzlcjgopkyyioimihae"
 
 [functions.gis-sync]
+verify_jwt = false
+
+[functions.scada-ingest]
 verify_jwt = false

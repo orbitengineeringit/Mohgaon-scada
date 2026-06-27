@@ -13,57 +13,34 @@ import {
 
 interface TagUpdate {
   tagId: string;
-  value: number;
+  value: number | null;
   section: 'oht' | 'intake' | 'wtp';
   topic: string;
   reason?: 'interval' | 'abnormal' | 'alarm' | 'state_change';
 }
 
-// Instant ON/OFF: flip to disconnected as soon as MQTT stops delivering.
-// Typical SCADA publish cadence is 1-2s, so a 3s grace avoids false-OFF
-// while keeping the visible flip near-instant.
 const DISCONNECT_TIMEOUT_MS = 3000;
-// Historian persistence policy (BROWSER — critical events only):
-//  - Interval saves (every 5 min): handled by backend scada-ingest cron (source: backend:5min).
-//    The browser NO LONGER writes routine interval data to the DB. This keeps the
-//    free-tier storage usage low and eliminates duplicate writes.
-//  - Abnormal fluctuation: save immediately if value changes > ABNORMAL_DELTA_PCT of range
-//  - Alarm crossing: save immediately if value crosses high/low setpoint
-//  - Digital state change (pump on/off): save immediately
 const ABNORMAL_DELTA_PCT = 0.12;        // 12% of sensor range
 const FLUSH_INTERVAL_MS = 30 * 1000;    // batch-write queue to DB every 30s
 
-/**
- * Process-engineering safety bands per instrument type.
- * Independent of operator-configured setpoints (which may be wrong/missing).
- * If a reading falls OUTSIDE these bands → definitely abnormal → save immediately.
- * Returns true when the value is in the abnormal/unsafe zone.
- */
 const isAbnormalReading = (sensor: BuaBicchiyaSensor, value: number): boolean => {
   switch (sensor.instrumentType) {
     case 'pt':
     case 'combined_pt':
-      // Pressure (0-10 Bar): safe 0.3 – 80% of max. Below = pump dry-run risk, above = burst risk
       return value < 0.3 || value > sensor.max * 0.85;
     case 'lt':
-      // Level %: safe 8-95. Below = empty risk, above = overflow risk
       return value < 8 || value > 95;
     case 'flow':
-      // Flow: abnormal if > 95% of design capacity (overloading)
       return value > sensor.max * 0.95;
     case 'ph':
-      // pH: potable safe 6.5-8.5
       return value < 6.5 || value > 8.5;
     case 'chlorine':
-      // Free chlorine residual safe 0.2-1.5 mg/L
       return value < 0.2 || value > 1.5;
     case 'turbidity': {
-      // Raw intake turbidity tolerates higher; treated water must be < 5 NTU
       const isRawIntake = sensor.section === 'wtp' && sensor.id.includes('TA-IN');
       return isRawIntake ? value > 50 : value > 5;
     }
     case 'kw':
-      // Energy: abnormal if > 90% of max rated load
       return value > sensor.max * 0.9;
     default:
       return false;
@@ -85,8 +62,61 @@ export const useMqttTagSync = (
   const tagConfigCache = useRef<Map<string, string>>(new Map());
   const lastCacheRefresh = useRef<number>(0);
   const CACHE_TTL = 30000;
+  
   // Per-tag last-saved tracker for deadband + interval logic
-  const lastSaved = useRef<Map<string, { value: number; at: number; inAlarm: boolean }>>(new Map());
+  const lastSaved = useRef<Map<string, { value: number | null; at: number; inAlarm: boolean }>>(new Map());
+
+  // Alarm tracking state
+  const alarmActiveSince = useRef<Map<string, number>>(new Map());
+  // Sensor frozen tracking: tagId -> { value: number; timestamp: number }
+  const lastValueTracker = useRef<Map<string, { value: number; timestamp: number }>>(new Map());
+  // Rolling pressure history for cavitation checks: tagId -> { value: number; timestamp: number }[]
+  const pressureHistory = useRef<Map<string, { value: number; timestamp: number }[]>>(new Map());
+  // Rolling level history for turbulence check: tagId -> { value: number; timestamp: number }[]
+  const levelHistory = useRef<Map<string, { value: number; timestamp: number }[]>>(new Map());
+
+  // Helper to determine if pressure alarm should be suppressed due to no flow
+  const isPressureSuppressed = (sensorId: string, currentTags: TagData[]): boolean => {
+    const getSectionFlowValue = (sec: 'intake' | 'wtp', flowTagId: string): number => {
+      const localTags = sec === 'intake' ? intakeTags : wtpTags;
+      const localFlow = localTags.find(t => t.id === flowTagId);
+      
+      // If local flow sensor is online and valid, use it
+      if (localFlow && localFlow.status === 'connected' && localFlow.value !== null) {
+        return localFlow.value;
+      }
+      
+      // Fallback to cross-section redundancy (Intake outflow matches WTP raw water inflow)
+      const crossTags = sec === 'intake' ? wtpTags : intakeTags;
+      const crossFlowId = sec === 'intake' ? 'WTP-Flow-IN' : 'INT-Flow';
+      const crossFlow = crossTags.find(t => t.id === crossFlowId);
+      if (crossFlow && crossFlow.status === 'connected' && crossFlow.value !== null) {
+        return crossFlow.value;
+      }
+      
+      return 999.0; // If both are offline, disable suppression (safety fallback)
+    };
+
+    if (sensorId.startsWith('INT-PT') || sensorId === 'INT-CombinedPT') {
+      const flowVal = getSectionFlowValue('intake', 'INT-Flow');
+      return flowVal < 5.0;
+    }
+    if (sensorId.startsWith('WTP-PT') || sensorId.startsWith('WTP-CombinedPT')) {
+      const flowVal = getSectionFlowValue('wtp', 'WTP-Flow-IN');
+      return flowVal < 5.0;
+    }
+    if (sensorId.startsWith('OHT') && sensorId.includes('-PT')) {
+      const ohtNum = sensorId.match(/OHT(\d+)/)?.[1];
+      if (ohtNum) {
+        const flowTag = currentTags.find(t => t.id === `OHT${ohtNum}-Flow-IN`);
+        if (!flowTag || flowTag.status !== 'connected' || flowTag.value === null) {
+          return false; // local flow sensor offline, disable suppression
+        }
+        return flowTag.value < 1.0;
+      }
+    }
+    return false;
+  };
 
   useEffect(() => {
     disconnectCheckInterval.current = setInterval(() => {
@@ -97,6 +127,18 @@ export const useMqttTagSync = (
             const elapsed = now.getTime() - tag.lastDataTime.getTime();
             const timeout = tag.section === 'intake' ? 8000 : tag.section === 'oht' ? 25000 : 35000;
             if (elapsed > timeout && tag.status !== 'disconnected') {
+              // Add a Disconnect alarm (TDM Case E)
+              const msg = `Communication Loss: ${tag.label} is offline (No data for ${Math.round(elapsed / 1000)}s)`;
+              addAlarm({
+                tagId: tag.id,
+                tagConfigId: tag.dbId,
+                label: tag.label,
+                value: 0,
+                unit: '',
+                type: 'Disconnect',
+                message: msg,
+                section: tag.section,
+              });
               return { ...tag, status: 'disconnected' as const };
             }
           }
@@ -195,48 +237,151 @@ export const useMqttTagSync = (
       validKeys = VALID_WTP_KEYS;
     } else return;
 
+    // Build map of latest values in this message cycle to support MIV cross-checks
+    const latestValues = new Map<string, number>();
+    tags.forEach(t => latestValues.set(t.id, t.value));
+
     for (const [mqttKey, rawValue] of Object.entries(payload)) {
       if (!validKeys.includes(mqttKey)) continue;
 
       const value = typeof rawValue === 'string' ? parseFloat(rawValue) : rawValue;
-      if (isNaN(value)) continue;
-
+      
       const sensor = sensors.find(s => s.mqttKey === mqttKey);
       if (!sensor) continue;
 
       const sensorId = sensor.id;
       const existingTag = tags.find(t => t.id === sensorId);
 
-      let displayValue = value;
-      let shouldLog = true;
+      // --- 1. Telemetry Validation Layer (TDM Case A & B) ---
+      const isNaNOrInfinite = value === null || value === undefined || isNaN(value) || !Number.isFinite(value);
+      const isNegativeOverflow = !isNaNOrInfinite && (value < sensor.min - Math.max(1.0, sensor.max * 0.1));
+      const isPositiveOverflow = !isNaNOrInfinite && (
+        value > sensor.max * 2.0 || 
+        value === 32767 || 
+        value === 65535 || 
+        value > 1e10
+      );
+      const isCorrupt = isNaNOrInfinite || isNegativeOverflow || isPositiveOverflow;
 
-      // Non-pump analog instruments
-      if (value < 0) { displayValue = 0; shouldLog = false; }
-      if (value === 0) { displayValue = 0; shouldLog = false; }
-      // PT overflow protection
-      if (sensor.instrumentType === 'pt' && value > 1e30) { displayValue = 0; shouldLog = false; }
+      if (isCorrupt) {
+        // Non-destructive error logging: save null in historian to record the incident
+        pendingLogs.current.push({
+          tagId: sensorId, value: null,
+          section: section as 'oht' | 'intake' | 'wtp',
+          topic, reason: 'alarm',
+        });
 
-      // Alarm check for analog sensors (uses operator setpoints or engineering defaults)
-      if (existingTag && sensor.type === 'analog') {
+        // Trigger Sensor Signal Fault alarm with 30s debounce to avoid transient spikes
+        const faultKey = `${sensorId}-SignalFault`;
+        const faultStart = alarmActiveSince.current.get(faultKey);
+        if (!faultStart) {
+          alarmActiveSince.current.set(faultKey, Date.now());
+        } else if (Date.now() - faultStart > 30000) {
+          const type = isNegativeOverflow ? 'Sensor Wire Break' : 'Signal Overflow';
+          const msg = `Telemetry Fault: ${sensor.label} (${sensorId}) is reading corrupt value: ${value}. (${type})`;
+          addAlarm({
+            tagId: sensorId, tagConfigId: existingTag?.dbId, label: sensor.label,
+            value: 0, unit: sensor.unit, type: 'Low', message: msg,
+            section: section as 'intake' | 'oht' | 'wtp',
+          });
+        }
+        continue; // Discard further processing for this sensor
+      }
+
+      // Reset signal fault debounce if reading is healthy
+      alarmActiveSince.current.delete(`${sensorId}-SignalFault`);
+
+      // --- 2. Numeric Precision (Rounding Jitter Filters) ---
+      let roundedValue = value;
+      if (sensor.instrumentType === 'pt' || sensor.instrumentType === 'combined_pt' || sensor.instrumentType === 'lt' || sensor.instrumentType === 'ph' || sensor.instrumentType === 'chlorine') {
+        roundedValue = Math.round(value * 100) / 100; // 2 decimal places
+      } else if (sensor.instrumentType === 'flow' || sensor.instrumentType === 'kw' || sensor.instrumentType === 'turbidity') {
+        roundedValue = Math.round(value * 10) / 10;  // 1 decimal place
+      }
+
+      const displayValue = roundedValue;
+      latestValues.set(sensorId, displayValue);
+
+      // --- 3. Sensor Frozen / Stuck Check (TDM Case C) ---
+      const now = Date.now();
+      const lastValEntry = lastValueTracker.current.get(sensorId);
+      
+      let sectionFlowActive = false;
+      if (section === 'intake') {
+        const flowTag = intakeTags.find(t => t.id === 'INT-Flow');
+        sectionFlowActive = flowTag ? flowTag.value > 10.0 : false;
+      } else if (section === 'wtp') {
+        const flowTag = wtpTags.find(t => t.id === 'WTP-Flow-IN');
+        sectionFlowActive = flowTag ? flowTag.value > 10.0 : false;
+      }
+      
+      if (sensor.type === 'analog' && sectionFlowActive) {
+        if (!lastValEntry || lastValEntry.value !== value) {
+          lastValueTracker.current.set(sensorId, { value, timestamp: now });
+          alarmActiveSince.current.delete(`${sensorId}-Frozen`);
+        } else if (now - lastValEntry.timestamp > 30 * 60 * 1000) { // 30 minutes stuck
+          const frozenKey = `${sensorId}-Frozen`;
+          const frozenStart = alarmActiveSince.current.get(frozenKey);
+          if (!frozenStart) {
+            alarmActiveSince.current.set(frozenKey, now);
+            const msg = `Telemetry Fault: ${sensor.label} (${sensorId}) is frozen at exactly ${displayValue.toFixed(2)} ${sensor.unit} (No signal jitter for 30 min)`;
+            addAlarm({
+              tagId: sensorId, tagConfigId: existingTag?.dbId, label: sensor.label,
+              value: displayValue, unit: sensor.unit, type: 'Low', message: msg,
+              section: section as 'intake' | 'oht' | 'wtp',
+            });
+          }
+        }
+      } else {
+        lastValueTracker.current.set(sensorId, { value, timestamp: now });
+        alarmActiveSince.current.delete(`${sensorId}-Frozen`);
+      }
+
+      // --- 4. Alarm limit validation (with 15s Debounce, Suppression & Watchdog blocks) ---
+      // Standard High/Low alarms only process if tag is online (TDM Case E backup)
+      const isTagConnected = existingTag ? existingTag.status === 'connected' : true;
+      if (existingTag && sensor.type === 'analog' && isTagConnected) {
         const defaults = getDefaultSetpoints(sensor);
         const highThreshold = existingTag.highSetpoint ?? defaults.high ?? existingTag.max;
         const lowThreshold = existingTag.lowSetpoint ?? defaults.low ?? existingTag.min;
         const alarmEnabled = existingTag.alarmEnabled !== false;
-        if (alarmEnabled && (displayValue > highThreshold || displayValue < lowThreshold)) {
-          const type = displayValue > highThreshold ? 'High' : 'Low';
-          const threshold = type === 'High' ? highThreshold : lowThreshold;
-          const msg = `Alarm: ${existingTag.label} ${type} (${displayValue.toFixed(2)} ${existingTag.unit}) - Threshold: ${threshold}`;
-          addAlarm({
-            tagId: sensorId, tagConfigId: existingTag.dbId, label: existingTag.label,
-            value: displayValue, unit: existingTag.unit, type, message: msg,
-            section: section as 'intake' | 'oht' | 'wtp',
-            highSetpoint: existingTag.highSetpoint ?? (defaults.high !== null ? defaults.high : undefined),
-            lowSetpoint: existingTag.lowSetpoint ?? (defaults.low !== null ? defaults.low : undefined),
-          });
+
+        const isLowAlarm = lowThreshold !== null && displayValue < lowThreshold;
+        const isHighAlarm = highThreshold !== null && displayValue > highThreshold;
+
+        // Suppress alarms if pressure is low but pump is stopped (Condition 2)
+        let suppressed = false;
+        if (isLowAlarm && (sensor.instrumentType === 'pt' || sensor.instrumentType === 'combined_pt')) {
+          suppressed = isPressureSuppressed(sensorId, tags);
+        }
+
+        const activeAlarmType = !suppressed && isHighAlarm ? 'High' : (!suppressed && isLowAlarm ? 'Low' : null);
+
+        if (alarmEnabled && activeAlarmType) {
+          const alarmKey = `${sensorId}-${activeAlarmType}`;
+          const activeTime = alarmActiveSince.current.get(alarmKey);
+          
+          if (!activeTime) {
+            alarmActiveSince.current.set(alarmKey, Date.now()); // Start 15s debounce
+          } else if (Date.now() - activeTime > 15000) {
+            const threshold = activeAlarmType === 'High' ? highThreshold : lowThreshold;
+            const msg = `Alarm: ${existingTag.label} ${activeAlarmType} (${displayValue.toFixed(2)} ${existingTag.unit}) - Threshold: ${threshold}`;
+            addAlarm({
+              tagId: sensorId, tagConfigId: existingTag.dbId, label: existingTag.label,
+              value: displayValue, unit: existingTag.unit, type: activeAlarmType, message: msg,
+              section: section as 'intake' | 'oht' | 'wtp',
+              highSetpoint: existingTag.highSetpoint ?? (defaults.high !== null ? defaults.high : undefined),
+              lowSetpoint: existingTag.lowSetpoint ?? (defaults.low !== null ? defaults.low : undefined),
+            });
+          }
+        } else {
+          // Reset debounce if value goes healthy or suppressed
+          alarmActiveSince.current.delete(`${sensorId}-High`);
+          alarmActiveSince.current.delete(`${sensorId}-Low`);
         }
       }
 
-      // Update the sensor tag value and its derived pump status atomically in a single state change
+      // Update local state atomically
       setter(prev => {
         const pumpId = PT_TO_PUMP_MAP[sensorId];
         const pumpValue = sensor.instrumentType === 'pt' ? (displayValue > 1.5 ? 1 : 0) : null;
@@ -258,44 +403,317 @@ export const useMqttTagSync = (
         });
       });
 
-      if (shouldLog) {
-        // ---- Smart save decision: critical events only (interval saves are backend's job) ----
-        // The scada-ingest Edge Function runs every 5 min via pg_cron and saves routine data.
-        // Here we ONLY save truly important events that happen between cron intervals.
-        const key = `${section}-${sensorId}`;
-        const now = Date.now();
-        const prev = lastSaved.current.get(key);
+      // Smart save decision (Interval saves are backend's job)
+      const key = `${section}-${sensorId}`;
+      const nowSave = Date.now();
+      const prev = lastSaved.current.get(key);
+      const abnormalNow = isAbnormalReading(sensor, displayValue);
+      const range = Math.max(1e-6, (sensor.max ?? 1) - (sensor.min ?? 0));
+      const deltaPct = prev && prev.value !== null ? Math.abs(displayValue - prev.value) / range : 1;
 
-        // Use hardcoded process safety bands (operator setpoints may be wrong/missing)
-        const abnormalNow = isAbnormalReading(sensor, displayValue);
+      let reason: TagUpdate['reason'] | null = null;
+      if (sensor.type !== 'analog' && prev && displayValue !== prev.value) {
+        reason = 'state_change';
+      } else if (abnormalNow && (!prev || !prev.inAlarm)) {
+        reason = 'alarm';
+      } else if (prev && deltaPct >= ABNORMAL_DELTA_PCT) {
+        reason = 'abnormal';
+      }
 
-        const range = Math.max(1e-6, (sensor.max ?? 1) - (sensor.min ?? 0));
-        const deltaPct = prev ? Math.abs(displayValue - prev.value) / range : 1;
-
-        let reason: TagUpdate['reason'] | null = null;
-        if (sensor.type !== 'analog' && prev && displayValue !== prev.value) {
-          reason = 'state_change';                     // pump/valve on↔off — save immediately
-        } else if (abnormalNow && (!prev || !prev.inAlarm)) {
-          reason = 'alarm';                            // entered unsafe process zone — save immediately
-        } else if (prev && deltaPct >= ABNORMAL_DELTA_PCT) {
-          reason = 'abnormal';                         // sudden ≥12% fluctuation — save immediately
-        }
-        // NOTE: First-time-seen ('interval' for !prev) and regular 5-min interval saves
-        // are intentionally removed — the backend scada-ingest cron handles these.
-
-        if (reason) {
-          pendingLogs.current.push({
-            tagId: sensorId, value: displayValue,
-            section: section as 'oht' | 'intake' | 'wtp',
-            topic, reason,
-          });
-          lastSaved.current.set(key, { value: displayValue, at: now, inAlarm: abnormalNow });
-        } else if (!prev) {
-          // Track state for future delta comparisons even when not saving
-          lastSaved.current.set(key, { value: displayValue, at: now, inAlarm: abnormalNow });
-        }
+      if (reason) {
+        pendingLogs.current.push({
+          tagId: sensorId, value: displayValue,
+          section: section as 'oht' | 'intake' | 'wtp',
+          topic, reason,
+        });
+        lastSaved.current.set(key, { value: displayValue, at: nowSave, inAlarm: abnormalNow });
+      } else if (!prev) {
+        lastSaved.current.set(key, { value: displayValue, at: nowSave, inAlarm: abnormalNow });
       }
     }
+
+    // ==========================================
+    // --- 5. Multi-Instrument Cross-Validation (MIV & Ultra-MIV) ---
+    // ==========================================
+    const nowTime = Date.now();
+
+    // -- Ultra-MIV Rule 1: Pump Cavitation / Air Lock Check --
+    const checkCavitation = (ptId: string) => {
+      const ptVal = latestValues.get(ptId);
+      if (ptVal === undefined || ptVal <= 1.2) {
+        pressureHistory.current.delete(ptId);
+        alarmActiveSince.current.delete(`${ptId}-Cavitation`);
+        return;
+      }
+      let history = pressureHistory.current.get(ptId) || [];
+      history.push({ value: ptVal, timestamp: nowTime });
+      history = history.filter(h => nowTime - h.timestamp <= 15000);
+      pressureHistory.current.set(ptId, history);
+
+      if (history.length >= 5) {
+        const values = history.map(h => h.value);
+        const maxP = Math.max(...values);
+        const minP = Math.min(...values);
+        if (maxP - minP > 1.0) {
+          const cavKey = `${ptId}-Cavitation`;
+          const cavStart = alarmActiveSince.current.get(cavKey);
+          if (!cavStart) {
+            alarmActiveSince.current.set(cavKey, nowTime);
+            const tag = tags.find(t => t.id === ptId);
+            const msg = `Mechanical Fault: Pump Cavitation / Air Lock suspected on ${tag?.label || ptId} (Pressure fluctuates between ${minP.toFixed(2)} and ${maxP.toFixed(2)} Bar)`;
+            addAlarm({
+              tagId: ptId, tagConfigId: tag?.dbId, label: tag?.label || ptId,
+              value: ptVal, unit: 'Bar', type: 'High', message: msg,
+              section: section as 'intake' | 'wtp',
+            });
+          }
+        }
+      }
+    };
+
+    if (section === 'intake') {
+      checkCavitation('INT-PT1');
+      checkCavitation('INT-PT2');
+    } else if (section === 'wtp') {
+      checkCavitation('WTP-PT1');
+      checkCavitation('WTP-PT2');
+    }
+
+    // -- Ultra-MIV Rule 2: Pipeline Burst Check --
+    if (section === 'wtp') {
+      const flowIn = latestValues.get('WTP-Flow-IN') || 0;
+      const combinedPT = latestValues.get('WTP-CombinedPT1') || 0;
+      const flowTag = tags.find(t => t.id === 'WTP-Flow-IN');
+      const ptTag = tags.find(t => t.id === 'WTP-CombinedPT1');
+      
+      const isFlowActive = flowTag && flowTag.status === 'connected' && flowIn > 120.0;
+      const isPressureLow = ptTag && ptTag.status === 'connected' && combinedPT < 0.6;
+
+      if (isFlowActive && isPressureLow) {
+        const burstKey = 'WTP-PipelineBurst';
+        const burstStart = alarmActiveSince.current.get(burstKey);
+        if (!burstStart) {
+          alarmActiveSince.current.set(burstKey, nowTime);
+        } else if (nowTime - burstStart > 45000) {
+          const msg = `Critical Process Alert: Major Pipeline Burst / Leakage suspected (Flow: ${flowIn.toFixed(1)} m³/hr, pressure: ${combinedPT.toFixed(2)} Bar)`;
+          addAlarm({
+            tagId: 'WTP-CombinedPT1', tagConfigId: ptTag.dbId, label: 'Combined Pressure',
+            value: combinedPT, unit: 'Bar', type: 'Low', message: msg,
+            section: 'wtp',
+          });
+        }
+      } else {
+        alarmActiveSince.current.delete('WTP-PipelineBurst');
+      }
+    }
+
+    // -- Ultra-MIV Rule 3: Level Sensor Turbulence Filter --
+    const checkLevelTurbulence = (ltId: string) => {
+      const ltVal = latestValues.get(ltId);
+      if (ltVal === undefined) return;
+      let history = levelHistory.current.get(ltId) || [];
+      history.push({ value: ltVal, timestamp: nowTime });
+      history = history.filter(h => nowTime - h.timestamp <= 5000);
+      levelHistory.current.set(ltId, history);
+
+      if (history.length >= 3) {
+        const first = history[0].value;
+        const last = history[history.length - 1].value;
+        const delta = Math.abs(last - first);
+        if (delta > 15.0) { // level fluctuated by > 15% in 5 seconds
+          const turbKey = `${ltId}-Turbulence`;
+          const turbStart = alarmActiveSince.current.get(turbKey);
+          if (!turbStart) {
+            alarmActiveSince.current.set(turbKey, nowTime);
+            const tag = tags.find(t => t.id === ltId);
+            const msg = `Telemetry Warning: Level Sensor Turbulence / Jitter filter triggered on ${tag?.label || ltId} (fluctuation of ${delta.toFixed(1)}% ignored)`;
+            addAlarm({
+              tagId: ltId, tagConfigId: tag?.dbId, label: tag?.label || ltId,
+              value: ltVal, unit: tag?.unit || '%', type: 'Low', message: msg,
+              section: section as 'intake' | 'wtp',
+            });
+          }
+        }
+      }
+    };
+
+    if (section === 'oht') {
+      const ohtNum = subsection?.match(/OHT-(\d+)/)?.[1];
+      if (ohtNum) checkLevelTurbulence(`OHT${ohtNum}-LT`);
+    } else if (section === 'wtp') {
+      checkLevelTurbulence('WTP-LT-CW');
+    }
+
+    // -- Ultra-MIV Rule 4: Impeller Wear / Low Pump Output Detector (FDHE Fallback) --
+    if (section === 'wtp') {
+      const flowIn = latestValues.get('WTP-Flow-IN') || 0;
+      const kwVal = latestValues.get('WTP-KW') || 0;
+      
+      const checkPumpEfficiency = (ptId: string, pumpId: string) => {
+        const ptVal = latestValues.get(ptId) || 0;
+        const ptTag = tags.find(t => t.id === ptId);
+        
+        const isPtActive = ptTag && ptTag.status === 'connected' && ptVal > 1.8;
+        const kwTag = tags.find(t => t.id === 'WTP-KW');
+        const isKwActive = kwTag && kwTag.status === 'connected' && !kwTag.notInstalled && kwVal > 10.0;
+        const kwMissing = !kwTag || kwTag.status !== 'connected' || kwTag.notInstalled;
+        
+        const isPumpRunning = isPtActive && (isKwActive || kwMissing);
+        const flowTag = tags.find(t => t.id === 'WTP-Flow-IN');
+        const isFlowLow = flowTag && flowTag.status === 'connected' && flowIn < 40.0;
+
+        if (isPumpRunning && isFlowLow) {
+          const effKey = `${pumpId}-Efficiency`;
+          const effStart = alarmActiveSince.current.get(effKey);
+          if (!effStart) {
+            alarmActiveSince.current.set(effKey, nowTime);
+          } else if (nowTime - effStart > 120000) {
+            const msg = `Mechanical Alert: Low Pump Output suspected on ${pumpId} (Pressure: ${ptVal.toFixed(2)} Bar, flow: ${flowIn.toFixed(1)} m³/hr. ${kwMissing ? 'Note: Energy meter uninstalled/offline' : `Consumption: ${kwVal.toFixed(1)} kW`})`;
+            addAlarm({
+              tagId: pumpId, tagConfigId: ptTag?.dbId, label: pumpId,
+              value: ptVal, unit: 'Bar', type: 'Low', message: msg,
+              section: 'wtp',
+            });
+          }
+        } else {
+          alarmActiveSince.current.delete(`${pumpId}-Efficiency`);
+        }
+      };
+      checkPumpEfficiency('WTP-PT1', 'WTP-Pump1');
+      checkPumpEfficiency('WTP-PT2', 'WTP-Pump2');
+    }
+
+    // -- MIV Rule 1: Pump Dry-Run / Valve Blockage Detector (FDHE Fallback) --
+    const checkDryRun = (ptId: string, pumpId: string, flowTagId: string, minFlow: number) => {
+      const ptVal = latestValues.get(ptId) || 0;
+      const flowVal = latestValues.get(flowTagId) || 0;
+      const ptTag = tags.find(t => t.id === ptId);
+      const flowTag = tags.find(t => t.id === flowTagId);
+
+      const isPtHigh = ptTag && ptTag.status === 'connected' && ptVal > 1.8;
+      const isFlowNearZero = flowTag && flowTag.status === 'connected' && flowVal < minFlow;
+
+      if (isPtHigh && isFlowNearZero) {
+        const dryKey = `${pumpId}-DryRun`;
+        const dryStart = alarmActiveSince.current.get(dryKey);
+        if (!dryStart) {
+          alarmActiveSince.current.set(dryKey, nowTime);
+        } else if (nowTime - dryStart > 60000) {
+          const msg = `Mechanical Fault: Dry Run or Closed Discharge Valve suspected on ${pumpId} (High pressure ${ptVal.toFixed(2)} Bar, zero flow ${flowVal.toFixed(1)} m³/hr)`;
+          addAlarm({
+            tagId: pumpId, tagConfigId: ptTag?.dbId, label: pumpId,
+            value: ptVal, unit: 'Bar', type: 'High', message: msg,
+            section: section as 'intake' | 'wtp',
+          });
+        }
+      } else {
+        alarmActiveSince.current.delete(`${pumpId}-DryRun`);
+      }
+    };
+
+    if (section === 'intake') {
+      checkDryRun('INT-PT1', 'INT-Pump1', 'INT-Flow', 2.0);
+      checkDryRun('INT-PT2', 'INT-Pump2', 'INT-Flow', 2.0);
+    } else if (section === 'wtp') {
+      checkDryRun('WTP-PT1', 'WTP-Pump1', 'WTP-Flow-IN', 2.0);
+      checkDryRun('WTP-PT2', 'WTP-Pump2', 'WTP-Flow-IN', 2.0);
+    }
+
+    // -- MIV Rule 2 & 3: Flow active but pressure/level at 0 (Sensor Discrepancy) --
+    if (section === 'intake') {
+      const flowVal = latestValues.get('INT-Flow') || 0;
+      const pt1 = latestValues.get('INT-PT1') || 0;
+      const pt2 = latestValues.get('INT-PT2') || 0;
+      const level = latestValues.get('INT-LT') || 0;
+
+      const flowTag = tags.find(t => t.id === 'INT-Flow');
+      const pt1Tag = tags.find(t => t.id === 'INT-PT1');
+      const pt2Tag = tags.find(t => t.id === 'INT-PT2');
+      const ltTag = tags.find(t => t.id === 'INT-LT');
+
+      const isFlowActive = flowTag && flowTag.status === 'connected' && flowVal > 15.0;
+
+      if (isFlowActive && pt1Tag && pt1Tag.status === 'connected' && pt2Tag && pt2Tag.status === 'connected' && pt1 < 0.2 && pt2 < 0.2) {
+        const ptDiscKey = 'INT-PTDiscrepancy';
+        const ptDiscStart = alarmActiveSince.current.get(ptDiscKey);
+        if (!ptDiscStart) {
+          alarmActiveSince.current.set(ptDiscKey, nowTime);
+        } else if (nowTime - ptDiscStart > 30000) {
+          const msg = `Telemetry Fault: Intake Pressure Transmitters Discrepancy (Flow active ${flowVal.toFixed(1)} m³/hr, but both pressures read < 0.2 Bar)`;
+          addAlarm({
+            tagId: 'INT-CombinedPT', tagConfigId: pt1Tag.dbId, label: 'Combined Pressure',
+            value: 0, unit: 'Bar', type: 'Low', message: msg,
+            section: 'intake',
+          });
+        }
+      } else {
+        alarmActiveSince.current.delete('INT-PTDiscrepancy');
+      }
+
+      if (isFlowActive && ltTag && ltTag.status === 'connected' && level < 0.35) { // 5% of 7m is 0.35m
+        const ltDiscKey = 'INT-LTDiscrepancy';
+        const ltDiscStart = alarmActiveSince.current.get(ltDiscKey);
+        if (!ltDiscStart) {
+          alarmActiveSince.current.set(ltDiscKey, nowTime);
+        } else if (nowTime - ltDiscStart > 30000) {
+          const msg = `Telemetry Fault: Intake Suction Level Discrepancy (Flow active ${flowVal.toFixed(1)} m³/hr, but level sensor reads near-empty ${level.toFixed(2)}m)`;
+          addAlarm({
+            tagId: 'INT-LT', tagConfigId: ltTag.dbId, label: 'Intake Level',
+            value: level, unit: 'm', type: 'Low', message: msg,
+            section: 'intake',
+          });
+        }
+      } else {
+        alarmActiveSince.current.delete('INT-LTDiscrepancy');
+      }
+    } else if (section === 'wtp') {
+      const flowVal = latestValues.get('WTP-Flow-IN') || 0;
+      const pt1 = latestValues.get('WTP-PT1') || 0;
+      const pt2 = latestValues.get('WTP-PT2') || 0;
+      const level = latestValues.get('WTP-LT-CW') || 0;
+
+      const flowTag = tags.find(t => t.id === 'WTP-Flow-IN');
+      const pt1Tag = tags.find(t => t.id === 'WTP-PT1');
+      const pt2Tag = tags.find(t => t.id === 'WTP-PT2');
+      const ltTag = tags.find(t => t.id === 'WTP-LT-CW');
+
+      const isFlowActive = flowTag && flowTag.status === 'connected' && flowVal > 15.0;
+
+      if (isFlowActive && pt1Tag && pt1Tag.status === 'connected' && pt2Tag && pt2Tag.status === 'connected' && pt1 < 0.2 && pt2 < 0.2) {
+        const ptDiscKey = 'WTP-PTDiscrepancy';
+        const ptDiscStart = alarmActiveSince.current.get(ptDiscKey);
+        if (!ptDiscStart) {
+          alarmActiveSince.current.set(ptDiscKey, nowTime);
+        } else if (nowTime - ptDiscStart > 30000) {
+          const msg = `Telemetry Fault: WTP Discharge Pressures Discrepancy (Flow active ${flowVal.toFixed(1)} m³/hr, but both pressures read < 0.2 Bar)`;
+          addAlarm({
+            tagId: 'WTP-CombinedPT1', tagConfigId: pt1Tag.dbId, label: 'Combined Pressure',
+            value: 0, unit: 'Bar', type: 'Low', message: msg,
+            section: 'wtp',
+          });
+        }
+      } else {
+        alarmActiveSince.current.delete('WTP-PTDiscrepancy');
+      }
+
+      if (isFlowActive && ltTag && ltTag.status === 'connected' && level < 5.0) { // 5% of 100% CWR
+        const ltDiscKey = 'WTP-LTDiscrepancy';
+        const ltDiscStart = alarmActiveSince.current.get(ltDiscKey);
+        if (!ltDiscStart) {
+          alarmActiveSince.current.set(ltDiscKey, nowTime);
+        } else if (nowTime - ltDiscStart > 30000) {
+          const msg = `Telemetry Fault: WTP CWR Level Discrepancy (Flow active ${flowVal.toFixed(1)} m³/hr, but level sensor reads near-empty ${level.toFixed(1)}%)`;
+          addAlarm({
+            tagId: 'WTP-LT-CW', tagConfigId: ltTag.dbId, label: 'CWR Level',
+            value: level, unit: '%', type: 'Low', message: msg,
+            section: 'wtp',
+          });
+        }
+      } else {
+        alarmActiveSince.current.delete('WTP-LTDiscrepancy');
+      }
+    }
+
   }, [intakeTags, ohtTags, wtpTags, setIntakeTags, setOhtTags, setWtpTags, addAlarm]);
 
   return { processMqttMessage, startBatchWriter };

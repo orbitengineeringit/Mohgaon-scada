@@ -588,7 +588,7 @@ const WtpProcessSimulation: React.FC = () => {
   // Process tanks row - more compact, better connected
   const processY = 280;
   const mixerX = 340, mixerW = 90, mixerH = 150;
-  const flocX = 500, flocW = 130, flocH = 150;
+  const flocX = 480, flocW = 160, flocH = 150;
   const settleX = 700, settleW = 210, settleH = 150;
   const filterX = 980, filterW = 170, filterH = 150;
 
@@ -796,6 +796,16 @@ const WtpProcessSimulation: React.FC = () => {
           <clipPath id="wtp-settle-clip">
             <rect x={settleX} y={processY} width={settleW} height={settleH} />
           </clipPath>
+          {/* Sand media texture pattern */}
+          <pattern id="wtp-sand-texture" x="0" y="0" width="6" height="6" patternUnits="userSpaceOnUse">
+            <rect width="6" height="6" fill="#c49a6c" />
+            <circle cx="3" cy="3" r="1.5" fill="#a0784e" opacity="0.85" />
+          </pattern>
+          {/* Gravel support texture pattern */}
+          <pattern id="wtp-gravel-texture" x="0" y="0" width="10" height="10" patternUnits="userSpaceOnUse">
+            <rect width="10" height="10" fill="#8d8580" />
+            <circle cx="5" cy="5" r="3" fill="#6b6560" opacity="0.75" />
+          </pattern>
         </defs>
 
         {/* ═══ TITLE ═══ */}
@@ -851,49 +861,219 @@ const WtpProcessSimulation: React.FC = () => {
 
         {/* ═══ SECTION 2: FLASH MIXER ═══ */}
         <g>
+          {/* Tank body */}
           <rect x={mixerX} y={processY} width={mixerW} height={mixerH} rx={3}
             fill="url(#wtp-concrete)" stroke={waterFlowing ? '#22c55e' : '#475569'} strokeWidth={waterFlowing ? 2.5 : 2} />
-          <rect x={mixerX + 15} y={processY - 40} width={mixerW - 30} height={35} rx={4}
-            fill="hsl(280 60% 45%)" stroke="hsl(280 70% 30%)" strokeWidth="1.5" />
-          <text x={mixerX + mixerW / 2} y={processY - 20} textAnchor="middle" fontSize="9" fontWeight="700" fill="white" letterSpacing="0.5px">COAG</text>
-          <line x1={mixerX + mixerW / 2} y1={processY - 5} x2={mixerX + mixerW / 2} y2={processY + 10} stroke="hsl(280 60% 45%)" strokeWidth="3" strokeDasharray="4 3" />
-          <line x1={mixerX + mixerW / 2} y1={processY - 5} x2={mixerX + mixerW / 2} y2={processY + mixerH * 0.65}
-            stroke="#64748b" strokeWidth="4" />
-          <g transform={`translate(${mixerX + mixerW / 2}, ${processY + mixerH * 0.55})`}>
-            <line x1={-22} y1={0} x2={22} y2={0} stroke="#64748b" strokeWidth="3">
-              {waterFlowing && <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="1.5s" repeatCount="indefinite" />}
-            </line>
-            <line x1={0} y1={-22} x2={0} y2={22} stroke="#64748b" strokeWidth="3">
-              {waterFlowing && <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="1.5s" repeatCount="indefinite" />}
-            </line>
+
+          {/* Raw water fill inside tank */}
+          <rect x={mixerX + 4} y={processY + 18} width={mixerW - 8} height={mixerH - 22} rx={2} fill="url(#wtp-raw-water)" opacity="0.45" />
+
+          {/* 4 internal baffle strips (2 on left/right walls, reduce vortex) */}
+          <rect x={mixerX + 2} y={processY + 10} width={5} height={mixerH * 0.55} rx={1} fill="#475569" opacity="0.9" />
+          <rect x={mixerX + mixerW - 7} y={processY + 10} width={5} height={mixerH * 0.55} rx={1} fill="#475569" opacity="0.9" />
+
+          {/* Mechanical seal / stuffing box at shaft entry */}
+          <ellipse cx={mixerX + mixerW / 2} cy={processY + 5} rx={8} ry={4} fill="#64748b" stroke="#334155" strokeWidth="1.5" />
+
+          {/* Vertical shaft */}
+          <rect x={mixerX + mixerW / 2 - 2} y={processY + 4} width={4} height={mixerH * 0.68} fill="#475569" />
+          <rect x={mixerX + mixerW / 2 - 1} y={processY + 4} width={2} height={mixerH * 0.68} fill="#64748b" />
+
+          {/* 6-blade Rushton turbine impeller */}
+          <g transform={`translate(${mixerX + mixerW / 2}, ${processY + mixerH * 0.68})`}>
+            <g>
+              {waterFlowing && (
+                <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="1.5s" repeatCount="indefinite" />
+              )}
+              {[0, 60, 120, 180, 240, 300].map((angle, i) => {
+                const rad = (angle * Math.PI) / 180;
+                return <line key={i} x1={0} y1={0} x2={24 * Math.cos(rad)} y2={24 * Math.sin(rad)} stroke="#94a3b8" strokeWidth="5" strokeLinecap="square" />;
+              })}
+              <circle cx={0} cy={0} r={6} fill="#334155" stroke="#64748b" strokeWidth="2" />
+            </g>
           </g>
-          <rect x={mixerX + 4} y={processY + 20} width={mixerW - 8} height={mixerH - 24} rx={2} fill="url(#wtp-raw-water)" opacity="0.5" />
+
+          {/* I-beam platform spanning tank top (supports motor+gearbox) */}
+          <rect x={mixerX - 10} y={processY - 14} width={mixerW + 20} height={9} rx={2} fill="#1e293b" stroke="#0f172a" strokeWidth="1" />
+          <line x1={mixerX - 10} y1={processY - 14} x2={mixerX + mixerW + 10} y2={processY - 14} stroke="#334155" strokeWidth="2" />
+          <circle cx={mixerX - 4} cy={processY - 10} r={3} fill="#0f172a" stroke="#334155" strokeWidth="0.5" />
+          <circle cx={mixerX + mixerW + 4} cy={processY - 10} r={3} fill="#0f172a" stroke="#334155" strokeWidth="0.5" />
+
+          {/* Gearbox (heavy square housing on platform) */}
+          <rect x={mixerX + mixerW / 2 - 20} y={processY - 46} width={40} height={30} rx={3} fill="#374151" stroke="#1e293b" strokeWidth="1.5" />
+          <rect x={mixerX + mixerW / 2 - 22} y={processY - 48} width={44} height={4} rx={1} fill="#4b5563" stroke="#374151" strokeWidth="0.5" />
+          <rect x={mixerX + mixerW / 2 - 22} y={processY - 20} width={44} height={4} rx={1} fill="#4b5563" stroke="#374151" strokeWidth="0.5" />
+          <text x={mixerX + mixerW / 2} y={processY - 27} textAnchor="middle" fontSize="7" fontWeight="800" fill="#94a3b8" letterSpacing="0.5px">GEAR</text>
+
+          {/* Motor body (cylindrical, above gearbox) */}
+          <rect x={mixerX + mixerW / 2 - 26} y={processY - 90} width={52} height={42} rx={4} fill="#1e3a5f" stroke="#172554" strokeWidth="1.5" />
+          {/* Cooling fins (horizontal ribs on motor body) */}
+          {[...Array(9)].map((_, i) => (
+            <line key={i}
+              x1={mixerX + mixerW / 2 - 23} y1={processY - 87 + i * 4}
+              x2={mixerX + mixerW / 2 + 18} y2={processY - 87 + i * 4}
+              stroke="#172554" strokeWidth="1" opacity="0.8" />
+          ))}
+          {/* Terminal box on right side */}
+          <rect x={mixerX + mixerW / 2 + 20} y={processY - 78} width={12} height={16} rx={2} fill="#374151" stroke="#1e293b" strokeWidth="1" />
+          <line x1={mixerX + mixerW / 2 + 22} y1={processY - 74} x2={mixerX + mixerW / 2 + 30} y2={processY - 74} stroke="#4b5563" strokeWidth="1" />
+          <line x1={mixerX + mixerW / 2 + 22} y1={processY - 69} x2={mixerX + mixerW / 2 + 30} y2={processY - 69} stroke="#4b5563" strokeWidth="1" />
+          {/* Motor nameplate */}
+          <rect x={mixerX + mixerW / 2 - 20} y={processY - 83} width={28} height={13} rx={1} fill="#0f172a" stroke="#334155" strokeWidth="0.5" />
+          <text x={mixerX + mixerW / 2 - 6} y={processY - 73} textAnchor="middle" fontSize="6" fontWeight="700" fill="#60a5fa">MOTOR</text>
+
+          {/* Status LED (green=running, red=stopped) */}
+          <circle cx={mixerX + mixerW / 2 - 18} cy={processY - 58} r={4.5} fill={waterFlowing ? '#22c55e' : '#ef4444'}>
+            {waterFlowing && <animate attributeName="opacity" values="1;0.35;1" dur="1.2s" repeatCount="indefinite" />}
+          </circle>
+          <circle cx={mixerX + mixerW / 2 - 18} cy={processY - 58} r={2} fill={waterFlowing ? '#86efac' : '#fca5a5'} opacity="0.8" />
+
+          {/* Rear fan guard (circle at top of motor with spinning blades) */}
+          <circle cx={mixerX + mixerW / 2} cy={processY - 96} r={13} fill="none" stroke="#334155" strokeWidth="1.5" />
+          <g transform={`translate(${mixerX + mixerW / 2}, ${processY - 96})`}>
+            <g>
+              {waterFlowing && (
+                <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="0.5s" repeatCount="indefinite" />
+              )}
+              {[0, 72, 144, 216, 288].map((angle, i) => {
+                const rad = (angle * Math.PI) / 180;
+                return <line key={i} x1={0} y1={0} x2={10 * Math.cos(rad)} y2={10 * Math.sin(rad)} stroke="#475569" strokeWidth="1.5" strokeLinecap="round" />;
+              })}
+              <circle cx={0} cy={0} r={2.5} fill="#64748b" />
+            </g>
+          </g>
+
+          {/* COAG dosing box (positioned to left of motor assembly) */}
+          <rect x={mixerX - 74} y={processY - 60} width={54} height={32} rx={4} fill="hsl(280 60% 45%)" stroke="hsl(280 70% 30%)" strokeWidth="1.5" />
+          <text x={mixerX - 47} y={processY - 40} textAnchor="middle" fontSize="9" fontWeight="700" fill="white" letterSpacing="0.5px">COAG</text>
+          {/* Dashed dosing pipe from COAG to tank top */}
+          <line x1={mixerX - 20} y1={processY - 44} x2={mixerX + 14} y2={processY + 6} stroke="hsl(280 60% 45%)" strokeWidth="2.5" strokeDasharray="4 3" />
+
+          {/* Labels */}
           <text x={mixerX + mixerW / 2} y={processY + mixerH + 20} textAnchor="middle" fontSize="12" fontWeight="800" fill="hsl(var(--foreground))">FLASH</text>
           <text x={mixerX + mixerW / 2} y={processY + mixerH + 34} textAnchor="middle" fontSize="12" fontWeight="800" fill="hsl(var(--foreground))">MIXER</text>
           <StatusBadge x={mixerX + mixerW / 2} y={processY + mixerH + 40} isOn={waterFlowing} />
+
           {/* Pipe: Mixer → Flocculator (properly connected boundary to boundary) */}
           {drawPipe(`M ${mixerX + mixerW} ${processY + 120} L ${flocX} ${processY + 120}`, pipeW, false)}
           {drawWaterFlow(`M ${mixerX + mixerW} ${processY + 120} L ${flocX} ${processY + 120}`, flowInVal, flowInVal > 0)}
         </g>
 
-        {/* ═══ SECTION 3: FLOCCULATOR ═══ */}
+        {/* ═══ SECTION 3: CLARIFLOCCULATOR ═══ */}
         <g>
+          {/* Clip path for rotating paddles (limits rendering to inside the flocculation well) */}
+          <defs>
+            <clipPath id="wtp-floc-well-clip">
+              <rect x={flocX + flocW / 2 - 32} y={processY} width={64} height={flocH * 0.58} />
+            </clipPath>
+          </defs>
+
+          {/* Outer Tank Concrete Body */}
           <rect x={flocX} y={processY} width={flocW} height={flocH} rx={3}
             fill="url(#wtp-concrete)" stroke={waterFlowing ? '#22c55e' : '#475569'} strokeWidth={waterFlowing ? 2.5 : 2} />
-          {[0.25, 0.5, 0.75].map((f, i) => (
-            <line key={i} x1={flocX + flocW * f} y1={processY + 8} x2={flocX + flocW * f} y2={processY + flocH - (i % 2 === 0 ? 8 : 25)}
-              stroke="#475569" strokeWidth="3" />
-          ))}
-          {[0.35, 0.65].map((f, i) => (
-            <g key={i} transform={`translate(${flocX + flocW * f}, ${processY + flocH * 0.6})`}>
-              <line x1={-12} y1={0} x2={12} y2={0} stroke="#64748b" strokeWidth="2.5">
-                {waterFlowing && <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="4s" repeatCount="indefinite" />}
-              </line>
+
+          {/* Outer Zone Settling Water (Blue top layer, brown bottom layer) */}
+          <rect x={flocX + 4} y={processY + 16} width={flocW - 8} height={flocH - 20} rx={2} fill="#38bdf8" opacity="0.18" />
+          <rect x={flocX + 4} y={processY + flocH * 0.65} width={flocW - 8} height={flocH * 0.35 - 4} rx={1} fill="#92400e" opacity="0.25" />
+
+          {/* Inner Flocculation Well Water (Denser, turbid raw water) */}
+          <rect x={flocX + flocW / 2 - 32} y={processY + 12} width={64} height={flocH * 0.46} fill="url(#wtp-raw-water)" opacity="0.45" />
+
+          {/* Inner Flocculation Well Baffle Walls */}
+          <rect x={flocX + flocW / 2 - 34} y={processY + 4} width={3} height={flocH * 0.55} rx={0.5} fill="#475569" />
+          <rect x={flocX + flocW / 2 + 31} y={processY + 4} width={3} height={flocH * 0.55} rx={0.5} fill="#475569" />
+
+          {/* Effluent Launders (Left and Right) */}
+          <rect x={flocX + 4} y={processY + 4} width={12} height={14} fill="#cbd5e1" stroke="#64748b" strokeWidth="0.8" />
+          <rect x={flocX + flocW - 16} y={processY + 4} width={12} height={14} fill="#cbd5e1" stroke="#64748b" strokeWidth="0.8" />
+
+          {/* Central Sludge Hopper (V-shaped bottom) */}
+          <path d={`M ${flocX + 24} ${processY + flocH} L ${flocX + flocW / 2} ${processY + flocH + 34} L ${flocX + flocW - 24} ${processY + flocH}`}
+            fill="url(#wtp-concrete)" stroke="#475569" strokeWidth="2" />
+          <rect x={flocX + flocW / 2 - 4} y={processY + flocH + 32} width={8} height={16} fill="#475569" />
+
+          {/* Walkway Bridge, Mast & Diagonal Structural Truss */}
+          <rect x={flocX - 10} y={processY - 12} width={flocW / 2 + 10} height={6} fill="#334155" stroke="#1e293b" strokeWidth="1" />
+          {/* Handrail posts & bars */}
+          <line x1={flocX - 8} y1={processY - 12} x2={flocX - 8} y2={processY - 26} stroke="#475569" strokeWidth="1.5" />
+          <line x1={flocX + flocW * 0.25} y1={processY - 12} x2={flocX + flocW * 0.25} y2={processY - 26} stroke="#475569" strokeWidth="1.5" />
+          <line x1={flocX + flocW / 2 - 8} y1={processY - 12} x2={flocX + flocW / 2 - 8} y2={processY - 26} stroke="#475569" strokeWidth="1.5" />
+          <line x1={flocX - 10} y1={processY - 24} x2={flocX + flocW / 2 - 6} y2={processY - 24} stroke="#475569" strokeWidth="1" />
+          <line x1={flocX - 10} y1={processY - 18} x2={flocX + flocW / 2 - 6} y2={processY - 18} stroke="#475569" strokeWidth="1" />
+          
+          {/* Vertical Central Mast */}
+          <rect x={flocX + flocW / 2 - 4} y={processY - 65} width={8} height={65} fill="#334155" stroke="#1e293b" strokeWidth="1" />
+          
+          {/* Diagonal structural guy-wire (Truss support) */}
+          <line x1={flocX - 8} y1={processY - 26} x2={flocX + flocW / 2} y2={processY - 65} stroke="#475569" strokeWidth="2" strokeLinecap="round" />
+
+          {/* Gearbox/Drive Unit */}
+          <rect x={flocX + flocW / 2 - 12} y={processY - 24} width={24} height={16} rx={2} fill="#4b5563" stroke="#1f2937" strokeWidth="1" />
+          <circle cx={flocX + flocW / 2} cy={processY - 16} r={3} fill={waterFlowing ? '#22c55e' : '#ef4444'} />
+
+          {/* Central Shaft */}
+          <line x1={flocX + flocW / 2} y1={processY - 8} x2={flocX + flocW / 2} y2={processY + flocH - 12} stroke="#334155" strokeWidth="4" />
+
+          {/* Inner Flocculator Paddles (Clipped) */}
+          <g clipPath="url(#wtp-floc-well-clip)">
+            <g transform={`translate(${flocX + flocW / 2}, ${processY + flocH * 0.28})`}>
+              {waterFlowing && (
+                <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="4s" repeatCount="indefinite" additive="sum" />
+              )}
+              <line x1={-26} y1={0} x2={26} y2={0} stroke="#475569" strokeWidth="3" />
+              <rect x={-31} y={-8} width={6} height={16} fill="#64748b" />
+              <rect x={25} y={-8} width={6} height={16} fill="#64748b" />
             </g>
-          ))}
-          <rect x={flocX + 4} y={processY + 15} width={flocW - 8} height={flocH - 19} rx={2} fill="url(#wtp-raw-water)" opacity="0.4" />
-          <text x={flocX + flocW / 2} y={processY + flocH + 20} textAnchor="middle" fontSize="12" fontWeight="800" fill="hsl(var(--foreground))">FLOCCULATOR</text>
-          <StatusBadge x={flocX + flocW / 2} y={processY + flocH + 28} isOn={waterFlowing} />
+            <g transform={`translate(${flocX + flocW / 2}, ${processY + flocH * 0.48})`}>
+              {waterFlowing && (
+                <animateTransform attributeName="transform" type="rotate" from="360" to="0" dur="5.5s" repeatCount="indefinite" additive="sum" />
+              )}
+              <line x1={-26} y1={0} x2={26} y2={0} stroke="#475569" strokeWidth="3" />
+              <rect x={-31} y={-8} width={6} height={16} fill="#64748b" />
+              <rect x={25} y={-8} width={6} height={16} fill="#64748b" />
+            </g>
+          </g>
+
+          {/* Bottom Rotating Scraper Assembly (with angled scrapers) */}
+          <g>
+            {/* Left Scraper Arm */}
+            <line x1={flocX + flocW / 2} y1={processY + flocH - 10} x2={waterFlowing ? undefined : flocX + 16} y2={processY + flocH - 10} stroke="#334155" strokeWidth="3">
+              {waterFlowing && (
+                <animate attributeName="x2" values={`${flocX + 16};${flocX + flocW / 2};${flocX + 16}`} dur="8s" repeatCount="indefinite" />
+              )}
+            </line>
+            {[0.2, 0.4, 0.6, 0.8].map((frac, i) => (
+              <polygon key={i} points="0,0 4,-6 8,0" fill="#475569"
+                transform={`translate(${flocX + 16 + (flocW / 2 - 16) * frac}, ${processY + flocH - 10})`}>
+                {waterFlowing && (
+                  <animateTransform attributeName="transform" type="translate"
+                    values={`${flocX + 16 + (flocW / 2 - 16) * frac}, ${processY + flocH - 10}; ${flocX + flocW / 2}, ${processY + flocH - 10}; ${flocX + 16 + (flocW / 2 - 16) * frac}, ${processY + flocH - 10}`}
+                    dur="8s" repeatCount="indefinite" />
+                )}
+              </polygon>
+            ))}
+
+            {/* Right Scraper Arm */}
+            <line x1={flocX + flocW / 2} y1={processY + flocH - 10} x2={waterFlowing ? undefined : flocX + flocW - 16} y2={processY + flocH - 10} stroke="#334155" strokeWidth="3">
+              {waterFlowing && (
+                <animate attributeName="x2" values={`${flocX + flocW - 16};${flocX + flocW / 2};${flocX + flocW - 16}`} dur="8s" repeatCount="indefinite" />
+              )}
+            </line>
+            {[0.2, 0.4, 0.6, 0.8].map((frac, i) => (
+              <polygon key={i} points="0,0 4,-6 8,0" fill="#475569"
+                transform={`translate(${flocX + flocW / 2 + (flocW / 2 - 16) * frac}, ${processY + flocH - 10})`}>
+                {waterFlowing && (
+                  <animateTransform attributeName="transform" type="translate"
+                    values={`${flocX + flocW / 2 + (flocW / 2 - 16) * frac}, ${processY + flocH - 10}; ${flocX + flocW / 2}, ${processY + flocH - 10}; ${flocX + flocW / 2 + (flocW / 2 - 16) * frac}, ${processY + flocH - 10}`}
+                    dur="8s" repeatCount="indefinite" />
+                )}
+              </polygon>
+            ))}
+          </g>
+
+          {/* Labels */}
+          <text x={flocX + flocW / 2} y={processY + flocH + 64} textAnchor="middle" fontSize="12" fontWeight="800" fill="hsl(var(--foreground))">CLARIFLOCCULATOR</text>
+          <StatusBadge x={flocX + flocW / 2} y={processY + flocH + 78} isOn={waterFlowing} />
           {/* Pipe: Floc → Settling (properly connected boundary to boundary) */}
           {drawPipe(`M ${flocX + flocW} ${processY + 120} L ${settleX} ${processY + 120}`, pipeW, false)}
           {drawWaterFlow(`M ${flocX + flocW} ${processY + 120} L ${settleX} ${processY + 120}`, flowInVal, flowInVal > 0)}
@@ -901,21 +1081,80 @@ const WtpProcessSimulation: React.FC = () => {
 
         {/* ═══ SECTION 4: SETTLING TANK ═══ */}
         <g>
+          {/* Tank body */}
           <rect x={settleX} y={processY} width={settleW} height={settleH} rx={3}
             fill="url(#wtp-concrete)" stroke={waterFlowing ? '#22c55e' : '#475569'} strokeWidth={waterFlowing ? 2.5 : 2} />
-          {/* Hopper */}
-          <path d={`M ${settleX + 10} ${processY + settleH} L ${settleX + settleW / 2} ${processY + settleH + 40} L ${settleX + settleW - 10} ${processY + settleH}`}
-            fill="url(#wtp-concrete)" stroke="#475569" strokeWidth="2" />
 
+          {/* Zone fills — clipped to tank boundary */}
           <g clipPath="url(#wtp-settle-clip)">
-            <rect x={settleX + 4} y={processY + settleH - 25} width={settleW - 8} height={25} fill="#92400e" opacity="0.3" />
-            <rect x={settleX + 4} y={processY + settleH * 0.4} width={settleW - 8} height={settleH * 0.35} fill="#a3e635" opacity="0.15" />
-            <rect x={settleX + 4} y={processY + 10} width={settleW - 8} height={settleH * 0.35} fill="#38bdf8" opacity="0.2" />
+            {/* Settled sludge — dark brown, bottom 12% */}
+            <rect x={settleX + 4} y={processY + settleH * 0.88} width={settleW - 8} height={settleH * 0.12} fill="#78350f" opacity="0.6" />
+            {/* Sludge blanket — medium brown, lower 23% */}
+            <rect x={settleX + 4} y={processY + settleH * 0.65} width={settleW - 8} height={settleH * 0.23} fill="#92400e" opacity="0.38" />
+            {/* Floc / transition zone — light green, mid 32% */}
+            <rect x={settleX + 4} y={processY + settleH * 0.33} width={settleW - 8} height={settleH * 0.32} fill="#a3e635" opacity="0.12" />
+            {/* Clear water — sky blue, top 33% */}
+            <rect x={settleX + 4} y={processY + 4} width={settleW - 8} height={settleH * 0.29} fill="#38bdf8" opacity="0.22" />
           </g>
-          <rect x={settleX + settleW - 30} y={processY + 15} width={20} height={8} rx={2} fill="#cbd5e1" stroke="#64748b" strokeWidth="1" />
 
-          <text x={settleX + settleW / 2} y={processY + settleH + 54} textAnchor="middle" fontSize="12" fontWeight="800" fill="hsl(var(--foreground))">SLUDGE SETTLING TANK</text>
-          <StatusBadge x={settleX + settleW / 2} y={processY + settleH + 68} isOn={waterFlowing} />
+          {/* Inlet diffuser baffle (near left wall, prevents turbulence at entry) */}
+          <rect x={settleX + 18} y={processY + 8} width={4} height={settleH * 0.68} rx={1} fill="#64748b" stroke="#475569" strokeWidth="0.5" />
+
+          {/* Scum baffle near right outlet (prevents floating scum escaping) */}
+          <rect x={settleX + settleW - 28} y={processY + 5} width={4} height={settleH * 0.42} rx={1} fill="#64748b" stroke="#475569" strokeWidth="0.5" />
+
+          {/* Animated scraper mechanism — only moves when plant is running */}
+          <rect
+            x={waterFlowing ? undefined : settleX + 22}
+            y={processY + settleH - 11}
+            height={5}
+            width={settleW - 55}
+            rx={2}
+            fill="#475569"
+            stroke="#334155"
+            strokeWidth={1}
+            opacity={0.9}
+          >
+            {waterFlowing && (
+              <animate attributeName="x" values={`${settleX + 22};${settleX + settleW - 55};${settleX + 22}`} dur="9s" repeatCount="indefinite" calcMode="ease-in-out" />
+            )}
+          </rect>
+          {/* Scraper blade */}
+          <rect
+            x={waterFlowing ? undefined : settleX + 22}
+            y={processY + settleH - 14}
+            height={12}
+            width={6}
+            rx={1}
+            fill="#334155"
+            stroke="#475569"
+            strokeWidth={0.5}
+          >
+            {waterFlowing && (
+              <animate attributeName="x" values={`${settleX + settleW - 33};${settleX + settleW - 55};${settleX + settleW - 33}`} dur="9s" repeatCount="indefinite" calcMode="ease-in-out" />
+            )}
+          </rect>
+
+          {/* V-notch overflow weir on right wall */}
+          <rect x={settleX + settleW - 24} y={processY + 2} width={18} height={32} rx={2} fill="#64748b" stroke="#475569" strokeWidth="1" />
+          {/* V-notch cutouts */}
+          {[8, 15, 22].map((dy, i) => (
+            <polygon key={i}
+              points={`${settleX + settleW - 22},${processY + dy} ${settleX + settleW - 10},${processY + dy} ${settleX + settleW - 16},${processY + dy + 6}`}
+              fill="#1e293b" />
+          ))}
+          {/* Launder channel (effluent collection trough outside right wall) */}
+          <rect x={settleX + settleW + 2} y={processY + 2} width={14} height={36} rx={2} fill="#38bdf8" opacity="0.25" stroke="#0ea5e9" strokeWidth="1" />
+
+          {/* Sludge hopper (improved V-shape below tank) */}
+          <path d={`M ${settleX + 30} ${processY + settleH} L ${settleX + settleW / 2} ${processY + settleH + 48} L ${settleX + settleW - 30} ${processY + settleH}`}
+            fill="url(#wtp-concrete)" stroke="#475569" strokeWidth="2" />
+          {/* Sludge outlet pipe stub at hopper apex */}
+          <rect x={settleX + settleW / 2 - 4} y={processY + settleH + 46} width={8} height={20} fill="#475569" stroke="#334155" strokeWidth="1" rx={2} />
+          <rect x={settleX + settleW / 2 - 7} y={processY + settleH + 62} width={14} height={5} fill="#334155" rx={1} />
+
+          <text x={settleX + settleW / 2} y={processY + settleH + 82} textAnchor="middle" fontSize="12" fontWeight="800" fill="hsl(var(--foreground))">SLUDGE SETTLING TANK</text>
+          <StatusBadge x={settleX + settleW / 2} y={processY + settleH + 96} isOn={waterFlowing} />
           {/* Pipe: Settling → Filters (properly connected boundary to boundary) */}
           {drawPipe(`M ${settleX + settleW} ${processY + 120} L ${filterX} ${processY + 120}`, pipeW, false)}
           {drawWaterFlow(`M ${settleX + settleW} ${processY + 120} L ${filterX} ${processY + 120}`, flowInVal, flowInVal > 0)}
@@ -923,26 +1162,64 @@ const WtpProcessSimulation: React.FC = () => {
 
         {/* ═══ SECTION 5: RAPID SAND FILTERS + BACKWASH TANK ═══ */}
         <g>
+          {/* Tank body */}
           <rect x={filterX} y={processY} width={filterW} height={filterH} rx={3}
             fill="url(#wtp-concrete)" stroke={waterFlowing ? '#22c55e' : '#475569'} strokeWidth={waterFlowing ? 2.5 : 2} />
-          <rect x={filterX + 8} y={processY + 10} width={filterW - 16} height={filterH * 0.3} fill="#38bdf8" opacity="0.2" rx={2} />
-          <text x={filterX + filterW / 2} y={processY + filterH * 0.22} textAnchor="middle" fontSize="9" fill="hsl(var(--muted-foreground))">WATER</text>
-          <rect x={filterX + 8} y={processY + filterH * 0.4} width={filterW - 16} height={filterH * 0.25} fill="#d4a574" opacity="0.5" rx={2} />
-          <text x={filterX + filterW / 2} y={processY + filterH * 0.55} textAnchor="middle" fontSize="9" fill="hsl(var(--muted-foreground))">SAND</text>
-          <rect x={filterX + 8} y={processY + filterH * 0.7} width={filterW - 16} height={filterH * 0.25} fill="#a8a29e" opacity="0.5" rx={2} />
-          <text x={filterX + filterW / 2} y={processY + filterH * 0.85} textAnchor="middle" fontSize="9" fill="hsl(var(--muted-foreground))">GRAVEL</text>
+
+          {/* 2 Washwater troughs (concrete troughs at top, collect backwash + distribute inlet) */}
+          {(() => {
+            const tw = (filterW - 28) / 2;
+            const tx1 = filterX + 8;
+            const tx2 = filterX + 8 + tw + 8;
+            return (
+              <>
+                <rect x={tx1} y={processY + 5} width={tw} height={11} rx={2} fill="#94a3b8" stroke="#64748b" strokeWidth="1" />
+                <rect x={tx1 + 2} y={processY + 5} width={tw - 4} height={5} rx={1} fill="#64748b" opacity="0.5" />
+                <text x={tx1 + tw / 2} y={processY + 13} textAnchor="middle" fontSize="6" fill="#1e293b" fontWeight="700">TROUGH</text>
+                <rect x={tx2} y={processY + 5} width={tw} height={11} rx={2} fill="#94a3b8" stroke="#64748b" strokeWidth="1" />
+                <rect x={tx2 + 2} y={processY + 5} width={tw - 4} height={5} rx={1} fill="#64748b" opacity="0.5" />
+                <text x={tx2 + tw / 2} y={processY + 13} textAnchor="middle" fontSize="6" fill="#1e293b" fontWeight="700">TROUGH</text>
+              </>
+            );
+          })()}
+
+          {/* Water layer (supernatant above sand) */}
+          <rect x={filterX + 4} y={processY + 20} width={filterW - 8} height={filterH * 0.22} rx={1} fill="#38bdf8" opacity="0.25" />
+          <text x={filterX + filterW / 2} y={processY + 20 + filterH * 0.11} textAnchor="middle" fontSize="9" fill="#0ea5e9" fontWeight="700">WATER</text>
+
+          {/* Sand layer — with stipple texture pattern */}
+          <rect x={filterX + 4} y={processY + 20 + filterH * 0.22} width={filterW - 8} height={filterH * 0.38}
+            fill="url(#wtp-sand-texture)" rx={1} />
+          <text x={filterX + filterW / 2} y={processY + 20 + filterH * 0.22 + filterH * 0.19} textAnchor="middle" fontSize="9" fill="#78350f" fontWeight="700">SAND</text>
+
+          {/* Gravel support layer — with larger dot texture pattern */}
+          <rect x={filterX + 4} y={processY + 20 + filterH * 0.60} width={filterW - 8} height={filterH * 0.24}
+            fill="url(#wtp-gravel-texture)" rx={1} />
+          <text x={filterX + filterW / 2} y={processY + 20 + filterH * 0.60 + filterH * 0.12} textAnchor="middle" fontSize="9" fill="#44403c" fontWeight="700">GRAVEL</text>
+
+          {/* Underdrain manifold (main pipe + lateral branches at bottom) */}
+          <rect x={filterX + 4} y={processY + filterH - 12} width={filterW - 8} height={8} rx={2} fill="#475569" stroke="#334155" strokeWidth="1" />
+          {[0.1, 0.22, 0.34, 0.48, 0.62, 0.74, 0.86].map((frac, i) => (
+            <line key={i}
+              x1={filterX + 4 + (filterW - 8) * frac}
+              y1={processY + filterH - 12}
+              x2={filterX + 4 + (filterW - 8) * frac}
+              y2={processY + filterH - 6}
+              stroke="#334155" strokeWidth="2.5" />
+          ))}
+          <text x={filterX + filterW / 2} y={processY + filterH - 1} textAnchor="middle" fontSize="7" fill="#64748b" fontWeight="600">UNDERDRAIN</text>
 
           <text x={filterX + filterW / 2} y={processY + filterH + 20} textAnchor="middle" fontSize="12" fontWeight="800" fill="hsl(var(--foreground))">RAPID SAND FILTERS</text>
           <StatusBadge x={filterX + filterW / 2} y={processY + filterH + 28} isOn={waterFlowing} />
 
-          {/* Backwash Tank - right side of filter */}
+          {/* Backwash Tank — positioned above filter (unchanged) */}
           <rect x={bwTankX} y={bwTankY} width={bwTankW} height={bwTankH} rx={4}
             fill="url(#wtp-concrete)" stroke="#334155" strokeWidth="2" />
           <rect x={bwTankX + 4} y={bwTankY + bwTankH - bwFillH} width={bwTankW - 8} height={bwFillH} rx={3} fill="#f59e0b" opacity="0.5">
             <animate attributeName="opacity" values="0.4;0.6;0.4" dur="3s" repeatCount="indefinite" />
           </rect>
           <text x={bwTankX + bwTankW / 2} y={bwTankY - 10} textAnchor="middle" fontSize="10" fontWeight="800" fill="hsl(var(--foreground))">BACKWASH</text>
-          {/* Thin flush connecting pipe visually anchored boundary-to-boundary */}
+          {/* Connecting pipe: filter ↔ backwash tank */}
           {drawPipe(`M ${filterX + 12} ${processY} L ${filterX + 12} ${bwTankY + bwTankH}`, 10, false)}
           {drawLevelBar(bwTankX + bwTankW + 14, bwTankY, 32, bwTankH, ltBwVal, "LT-BW", "#f59e0b")}
         </g>
@@ -1325,7 +1602,7 @@ const WtpProcessSimulation: React.FC = () => {
           {[
             { sx: 80, sy: processY + mixerH + 78, text: 'STAGE 1: RAW WATER', color: 'hsl(var(--primary))' },
             { sx: mixerX + mixerW / 2, sy: processY + mixerH + 78, text: 'STAGE 2: MIXING', color: 'hsl(280 65% 55%)' },
-            { sx: flocX + flocW / 2, sy: processY + flocH + 65, text: 'STAGE 3: FLOCCULATION', color: 'hsl(35 90% 50%)' },
+            { sx: flocX + flocW / 2, sy: processY + flocH + 122, text: 'STAGE 3: CLARIFLOCCULATION', color: 'hsl(35 90% 50%)' },
             { sx: settleX + settleW / 2, sy: processY + settleH + 105, text: 'STAGE 4: SEDIMENTATION', color: 'hsl(38 70% 45%)' },
             { sx: filterX + filterW / 2, sy: processY + filterH + 65, text: 'STAGE 5: FILTRATION', color: 'hsl(200 70% 45%)' },
             { sx: outletEfmX, sy: mergeY + 101, text: 'STAGE 6: STORAGE', color: 'hsl(199 89% 48%)' },

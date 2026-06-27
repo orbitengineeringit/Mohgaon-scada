@@ -2,10 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Download, Mail, Trash2, Plus, Loader2, Shield, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
+import { Download, CheckCircle, Clock, Shield } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { logError } from '@/lib/errorLogger';
@@ -24,24 +23,21 @@ interface DataExport {
 }
 
 const DataExportSettings: React.FC = () => {
-  const [emails, setEmails] = useState<string[]>([]);
-  const [newEmail, setNewEmail] = useState('');
   const [exports, setExports] = useState<DataExport[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [recipientsResult, exportsResult] = await Promise.all([
-        supabase.from('notification_recipients').select('email').eq('scope', 'export'),
-        supabase.from('data_exports').select('*').order('created_at', { ascending: false }).limit(20),
-      ]);
+      const { data, error } = await supabase
+        .from('data_exports')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(20);
 
-      setEmails((recipientsResult.data || []).map((r: any) => r.email));
-      if (exportsResult.data) {
-        setExports(exportsResult.data as unknown as DataExport[]);
+      if (error) throw error;
+      if (data) {
+        setExports(data as unknown as DataExport[]);
       }
     } catch (error) {
       logError('DataExport.loadData', error);
@@ -50,79 +46,9 @@ const DataExportSettings: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => { loadData(); }, [loadData]);
-
-  const saveEmails = async (updatedEmails: string[]) => {
-    setIsSaving(true);
-    try {
-      // Replace export recipients: delete all + insert new
-      const { error: delErr } = await supabase
-        .from('notification_recipients')
-        .delete()
-        .eq('scope', 'export');
-      if (delErr) throw delErr;
-
-      if (updatedEmails.length > 0) {
-        const rows = updatedEmails.map((email) => ({
-          scope: 'export',
-          tag_config_id: null,
-          email: email.toLowerCase(),
-        }));
-        const { error: insErr } = await supabase
-          .from('notification_recipients')
-          .insert(rows);
-        if (insErr) throw insErr;
-      }
-
-      setEmails(updatedEmails);
-      toast.success('Export emails updated');
-    } catch (error) {
-      logError('DataExport.saveEmails', error);
-      toast.error('Failed to save emails');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const addEmail = () => {
-    const email = newEmail.trim();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      toast.error('Please enter a valid email address');
-      return;
-    }
-    if (emails.includes(email)) {
-      toast.error('Email already added');
-      return;
-    }
-    if (emails.length >= 5) {
-      toast.error('Maximum 5 emails allowed');
-      return;
-    }
-    saveEmails([...emails, email]);
-    setNewEmail('');
-  };
-
-  const removeEmail = (email: string) => {
-    saveEmails(emails.filter(e => e !== email));
-  };
-
-  const triggerManualExport = async () => {
-    setIsExporting(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('export-historian-data', {
-        body: { action: 'export' },
-      });
-
-      if (error) throw error;
-      toast.success('Export triggered successfully');
-      loadData();
-    } catch (error) {
-      logError('DataExport.triggerExport', error);
-      toast.error('Export failed');
-    } finally {
-      setIsExporting(false);
-    }
-  };
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const downloadExport = async (exp: DataExport) => {
     try {
@@ -151,7 +77,8 @@ const DataExportSettings: React.FC = () => {
   };
 
   const getStatusBadge = (exp: DataExport) => {
-    if (exp.status === 'cleaned') {
+    const isExpired = new Date(exp.period_end).getTime() < Date.now() - 365 * 24 * 60 * 60 * 1000;
+    if (exp.status === 'cleaned' || isExpired) {
       return <Badge className="bg-success/20 text-success"><CheckCircle className="h-3 w-3 mr-1" />Cleaned</Badge>;
     }
     if (exp.downloaded || exp.email_sent) {
@@ -162,48 +89,7 @@ const DataExportSettings: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Export Email Configuration */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Mail className="h-5 w-5 text-primary" />
-            Export Email Recipients
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Data export reports will be sent to these email addresses every 3 months automatically.
-          </p>
-          <div className="flex gap-2">
-            <Input
-              placeholder="Enter email address"
-              value={newEmail}
-              onChange={(e) => setNewEmail(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && addEmail()}
-              type="email"
-              className="flex-1"
-            />
-            <Button onClick={addEmail} disabled={isSaving} size="sm">
-              <Plus className="h-4 w-4 mr-1" />Add
-            </Button>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {emails.map((email) => (
-              <Badge key={email} variant="secondary" className="flex items-center gap-1 px-3 py-1.5">
-                {email}
-                <button onClick={() => removeEmail(email)} className="ml-1 hover:text-destructive">
-                  <Trash2 className="h-3 w-3" />
-                </button>
-              </Badge>
-            ))}
-            {emails.length === 0 && (
-              <p className="text-sm text-muted-foreground italic">No emails configured — exports won't be emailed</p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Data Retention Info */}
+      {/* Data Retention Policy */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
@@ -219,11 +105,11 @@ const DataExportSettings: React.FC = () => {
             </div>
             <div className="p-4 rounded-lg bg-success/5 border border-success/20">
               <h4 className="font-semibold text-sm text-success mb-1">Hourly Aggregates</h4>
-              <p className="text-xs text-muted-foreground">Exported every <strong>3 months</strong> as CSV via email + download</p>
+              <p className="text-xs text-muted-foreground">Preserved in database for <strong>1 year</strong>, and automatically exported every <strong>3 months</strong> as CSV via email + download</p>
             </div>
             <div className="p-4 rounded-lg bg-warning/5 border border-warning/20">
-              <h4 className="font-semibold text-sm text-warning mb-1">Safety Check</h4>
-              <p className="text-xs text-muted-foreground"><strong>7-day grace period</strong> — cleanup only after confirmed download/email</p>
+              <h4 className="font-semibold text-sm text-warning mb-1">1-Year Cleanup</h4>
+              <p className="text-xs text-muted-foreground"><strong>Rolling Monthly Deletion</strong> — Data older than 12 months is automatically deleted in 1-month blocks to keep database size lightweight</p>
             </div>
           </div>
         </CardContent>
@@ -231,16 +117,11 @@ const DataExportSettings: React.FC = () => {
 
       {/* Export History */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
             <Download className="h-5 w-5 text-primary" />
             Export History
           </CardTitle>
-          <Button onClick={triggerManualExport} disabled={isExporting} size="sm" variant="outline">
-            {isExporting
-              ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Exporting...</>
-              : <><Download className="h-4 w-4 mr-1" />Manual Export</>}
-          </Button>
         </CardHeader>
         <CardContent>
           {isLoading ? (

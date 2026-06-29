@@ -1,4 +1,4 @@
-project_id = "kpzlcjgopkyyioimihae"
+project_id = "tzuppdqvefvzgyrqstsy"
 
 [functions.gis-sync]
 verify_jwt = false
@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.export-historian-data]
 verify_jwt = false
+
+[functions.get-mqtt-credentials]
+verify_jwt = true

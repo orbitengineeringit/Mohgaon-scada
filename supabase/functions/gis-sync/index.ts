@@ -178,7 +178,7 @@ Deno.serve(async (req) => {
           pumps: [],
           ohts: [1, 2, 3, 4].map((n) => {
             const t = TAG.oht(n);
-            const id = (cfg as any)[`oht${n}_device_id`] || `BHU_OHT_00${n}`;
+            const id = (cfg as any)[`oht${n}_device_id`] || `MOH_OHT_00${n}`;
             return {
               ohT_Device_id: id,
               inletFlow_mld: mld(v(t.flow)),

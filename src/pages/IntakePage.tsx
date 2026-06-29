@@ -10,7 +10,7 @@ import CombinedPtGauge from '@/components/instruments/CombinedPtGauge';
 import SortableCardGrid, { SortableItem } from '@/components/SortableCardGrid';
 import SortableSectionList from '@/components/SortableSectionList';
 import IntakeProcessSimulation from '@/components/IntakeProcessSimulation';
-import { INTAKE_SENSORS } from '@/config/buaBicchiyaSensors';
+import { INTAKE_SENSORS } from '@/config/mohgaonSensors';
 import { TrendingUp, Bell, Wifi, WifiOff, BarChart2, LayoutGrid, Activity } from 'lucide-react';
 import IntakeIcon from '@/components/icons/IntakeIcon';
 import SensorTrendModal from '@/components/SensorTrendModal';

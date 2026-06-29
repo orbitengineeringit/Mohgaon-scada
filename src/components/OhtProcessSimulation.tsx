@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { BuaBicchiyaSensor } from '@/config/buaBicchiyaSensors';
+import { MohgaonSensor } from '@/config/mohgaonSensors';
 import SensorStatusStrip from './SensorStatusStrip';
 import { useScada } from '@/contexts/ScadaContext';
 
@@ -99,7 +99,7 @@ const CircularGauge: React.FC<CircularGaugeProps> = ({ cx, cy, r, value, min, ma
 };
 
 export interface OhtProcessSimulationProps {
-  sensors: BuaBicchiyaSensor[];
+  sensors: MohgaonSensor[];
   tags: any[];
   config: any;
 }

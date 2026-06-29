@@ -1,6 +1,6 @@
-import React, { useState, lazy, Suspense } from 'react';
+import React, { lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Settings, Wifi, WifiOff, Save, ArrowLeft, Radio, Eye, EyeOff, RefreshCw } from 'lucide-react';
+import { Settings, Wifi, WifiOff, Save, ArrowLeft, Radio, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,7 +10,7 @@ import { Separator } from '@/components/ui/separator';
 import { useMqtt } from '@/contexts/MqttContext';
 import { MqttStatus } from '@/components/MqttStatus';
 import { cn } from '@/lib/utils';
-import { MQTT_TOPIC_KEYS } from '@/config/buaBicchiyaSensors';
+import { MQTT_TOPIC_KEYS } from '@/config/mohgaonSensors';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const DataExportSettings = lazy(() => import('@/components/DataExportSettings'));
@@ -18,7 +18,6 @@ const DataExportSettings = lazy(() => import('@/components/DataExportSettings'))
 const MqttSettingsPage: React.FC = () => {
   const navigate = useNavigate();
   const { config, isConnected, isConnecting, messageCount, messagesPerSecond, lastMessage, lastError, connect, disconnect, updateConfig, saveConfig } = useMqtt();
-  const [showPassword, setShowPassword] = useState(false);
 
   return (
     <div className="min-h-screen bg-background grid-pattern">
@@ -56,19 +55,33 @@ const MqttSettingsPage: React.FC = () => {
                 </div>
               </div>
               <Separator />
-              <p className="text-xs text-muted-foreground">Credentials are session-only and not stored in the database for security.</p>
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="flex items-center gap-2 p-2.5 rounded-lg bg-success/10 border border-success/20">
+                <span className="text-xs font-medium text-success">
+                  {config.username
+                    ? `🔐 MQTT credentials loaded securely from server (${config.username})`
+                    : '⏳ MQTT credentials will load automatically after login'}
+                </span>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2 opacity-60">
                 <div className="space-y-2">
                   <Label>Username</Label>
-                  <Input value={config.username || ''} onChange={(e) => updateConfig({ username: e.target.value })} placeholder="Session only" />
+                  <Input
+                    value={config.username || ''}
+                    disabled
+                    placeholder="Auto-loaded from server"
+                    className="cursor-not-allowed"
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Password</Label>
                   <div className="relative">
-                    <Input type={showPassword ? 'text' : 'password'} value={config.password || ''} onChange={(e) => updateConfig({ password: e.target.value })} placeholder="Session only" />
-                    <Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0 h-full px-3" onClick={() => setShowPassword(!showPassword)}>
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </Button>
+                    <Input
+                      type="password"
+                      value={config.password || ''}
+                      disabled
+                      placeholder="Auto-loaded from server"
+                      className="cursor-not-allowed"
+                    />
                   </div>
                 </div>
               </div>

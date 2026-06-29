@@ -5,7 +5,7 @@ import StatusBar from '@/components/StatusBar';
 import InstrumentCard from '@/components/InstrumentCard';
 import SortableCardGrid, { SortableItem } from '@/components/SortableCardGrid';
 import SortableSectionList from '@/components/SortableSectionList';
-import { OHT1_SENSORS, OHT2_SENSORS, OHT3_SENSORS, OHT4_SENSORS, BuaBicchiyaSensor } from '@/config/buaBicchiyaSensors';
+import { OHT1_SENSORS, OHT2_SENSORS, OHT3_SENSORS, OHT4_SENSORS, MohgaonSensor } from '@/config/mohgaonSensors';
 import OhtAnalyticsCard from '@/components/OhtAnalyticsCard';
 import { BarChart2, LayoutGrid, Activity } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -20,7 +20,7 @@ interface OhtConfig {
   borderColor: string;
   bgColor: string;
   iconBg: string;
-  sensors: BuaBicchiyaSensor[];
+  sensors: MohgaonSensor[];
   startIndex: number;
   capacity: string;
   groupKey: string;
@@ -52,7 +52,7 @@ const OhtSubsection: React.FC<{ config: OhtConfig; tags: any[]; viewMode: 'cards
 
   const sensorIds = useMemo(() => config.sensors.filter(s => !s.notInstalled).map(s => s.id), [config.sensors, config.groupKey]);
   const sensorMap = useMemo(() => {
-    const map: Record<string, BuaBicchiyaSensor> = {};
+    const map: Record<string, MohgaonSensor> = {};
     config.sensors.forEach(s => { map[s.id] = s; });
     return map;
   }, [config.groupKey]);

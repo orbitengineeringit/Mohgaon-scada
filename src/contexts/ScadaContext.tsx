@@ -3,11 +3,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { logError, logDebug } from '@/lib/errorLogger';
 import {
   ALL_OHT_SENSORS, INTAKE_SENSORS, WTP_SENSORS, ALL_SENSORS,
-  BuaBicchiyaSensor, OHT1_SENSORS, OHT2_SENSORS, OHT3_SENSORS, OHT4_SENSORS,
-} from '@/config/buaBicchiyaSensors';
+  MohgaonSensor, OHT1_SENSORS, OHT2_SENSORS, OHT3_SENSORS, OHT4_SENSORS,
+} from '@/config/mohgaonSensors';
 
 /** Get default setpoints based on instrument type and range */
-export const getDefaultSetpoints = (sensor: BuaBicchiyaSensor): { high: number | null; low: number | null } => {
+export const getDefaultSetpoints = (sensor: MohgaonSensor): { high: number | null; low: number | null } => {
   switch (sensor.instrumentType) {
     case 'pt': // Pressure: high at 80% of max, low at 10% of max
       return { high: sensor.max * 0.8, low: sensor.max * 0.1 };
@@ -83,7 +83,7 @@ interface ScadaContextType extends ScadaState {
   setMqttEnabled: (enabled: boolean) => void;
 }
 
-const sensorToTag = (sensor: BuaBicchiyaSensor): TagData => ({
+const sensorToTag = (sensor: MohgaonSensor): TagData => ({
   id: sensor.id,
   label: sensor.label,
   unit: sensor.unit,

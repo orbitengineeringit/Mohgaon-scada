@@ -27,12 +27,12 @@ type ParamRow = { param: string; value: string; unit?: string; sensorId: string 
 const VENDOR_KEY = 'UADDORESREG022';
 
 const DEVICES = [
-  { key: 'intake', id: 'BHU_INTK_001', label: 'INTAKE WELL' },
-  { key: 'wtp', id: 'BHU_WTP_001', label: 'WATER TREATMENT PLANT (WTP)' },
-  { key: 'oht1', id: 'BHU_OHT_001', label: 'OHT-1' },
-  { key: 'oht2', id: 'BHU_OHT_002', label: 'OHT-2' },
-  { key: 'oht3', id: 'BHU_OHT_003', label: 'OHT-3' },
-  { key: 'oht4', id: 'BHU_OHT_004', label: 'OHT-4' },
+  { key: 'intake', id: 'MOH_INTK_001', label: 'INTAKE WELL' },
+  { key: 'wtp', id: 'MOH_WTP_001', label: 'WATER TREATMENT PLANT (WTP)' },
+  { key: 'oht1', id: 'MOH_OHT_001', label: 'OHT-1' },
+  { key: 'oht2', id: 'MOH_OHT_002', label: 'OHT-2' },
+  { key: 'oht3', id: 'MOH_OHT_003', label: 'OHT-3' },
+  { key: 'oht4', id: 'MOH_OHT_004', label: 'OHT-4' },
 ] as const;
 
 const GisSyncStatus = () => {

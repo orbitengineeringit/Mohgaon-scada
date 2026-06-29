@@ -14,7 +14,7 @@ BEGIN NEW.updated_at = now(); RETURN NEW; END; $$;
 -- =================== plant_config ===================
 CREATE TABLE IF NOT EXISTS public.plant_config (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  plant_name text DEFAULT 'Bua Bicchiya SCADA',
+  plant_name text DEFAULT 'Mohgaon SCADA',
   export_emails text[] DEFAULT '{}',
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
@@ -243,5 +243,5 @@ $$;
 -- Seed admin role for the existing admin user
 INSERT INTO public.user_roles (user_id, role)
 SELECT id, 'admin'::public.app_role FROM auth.users
-WHERE email = 'adminbicchiya@buabicchiya.scada'
+WHERE email = 'adminmohgaon@mohgaon.scada'
 ON CONFLICT DO NOTHING;

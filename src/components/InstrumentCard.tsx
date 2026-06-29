@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, memo, useCallback, useMemo } from 'react';
 import { useScada, TagData } from '@/contexts/ScadaContext';
-import { BuaBicchiyaSensor } from '@/config/buaBicchiyaSensors';
+import { MohgaonSensor } from '@/config/mohgaonSensors';
 import PtGauge from './instruments/PtGauge';
 import LevelBar from './instruments/LevelBar';
 import FlowIndicator from './instruments/FlowIndicator';
@@ -23,7 +23,7 @@ import { useTagConnection } from '@/hooks/useTagConnection';
 
 interface InstrumentCardProps {
   tag: TagData;
-  sensor: BuaBicchiyaSensor;
+  sensor: MohgaonSensor;
   section: 'intake' | 'oht' | 'wtp';
   index: number;
   pumpComponent?: 'intake' | 'wtp';

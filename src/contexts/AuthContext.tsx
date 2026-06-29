@@ -10,7 +10,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const AUTH_EMAIL_DOMAIN = '@buabicchiya.scada';
+const AUTH_EMAIL_DOMAIN = '@mohgaon.scada';
 const AUTO_LOGOUT_HOURS = 12;
 const AUTO_LOGOUT_MS = AUTO_LOGOUT_HOURS * 60 * 60 * 1000;
 

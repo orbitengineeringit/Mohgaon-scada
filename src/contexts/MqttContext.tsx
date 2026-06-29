@@ -3,7 +3,7 @@ import mqtt, { MqttClient, IClientOptions } from 'mqtt';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { logError, logDebug, logWarn, logInfo } from '@/lib/errorLogger';
-import { MQTT_TOPICS, ALL_MQTT_TOPICS, TOPIC_TO_SECTION, setTopicsFromDb } from '@/config/buaBicchiyaSensors';
+import { MQTT_TOPICS, ALL_MQTT_TOPICS, TOPIC_TO_SECTION, setTopicsFromDb } from '@/config/mohgaonSensors';
 
 export interface MqttConfig {
   id?: string;
@@ -70,6 +70,26 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
     const loadConfig = async () => {
       try {
         const { data } = await supabase.from('mqtt_config').select('*').limit(1).maybeSingle();
+
+        // Fetch MQTT credentials securely from Edge Function (never stored in frontend)
+        let mqttUsername: string | undefined = undefined;
+        let mqttPassword: string | undefined = undefined;
+        try {
+          const { data: session } = await supabase.auth.getSession();
+          if (session?.session?.access_token) {
+            const { data: creds, error: credErr } = await supabase.functions.invoke('get-mqtt-credentials');
+            if (!credErr && creds?.username) {
+              mqttUsername = creds.username;
+              mqttPassword = creds.password;
+              logInfo('MqttContext', 'MQTT credentials loaded from Vault');
+            } else {
+              logWarn('MqttContext', 'Could not load MQTT credentials from Vault — broker may require manual entry');
+            }
+          }
+        } catch (credFetchErr) {
+          logWarn('MqttContext', 'MQTT credentials fetch skipped: ' + String(credFetchErr));
+        }
+
         if (data) {
           let brokerUrl = data.broker_url;
           const isSecure = typeof window !== 'undefined' && window.location.protocol === 'https:';
@@ -80,8 +100,8 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
           setConfig({
             id: data.id,
             brokerUrl,
-            username: undefined,
-            password: undefined,
+            username: mqttUsername,
+            password: mqttPassword,
             clientId: data.client_id || undefined,
             autoConnect: data.auto_connect,
             topics: {
@@ -103,6 +123,10 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
           });
           if (data.auto_connect) connectRef.current?.();
         } else {
+          // No DB config — still apply credentials if loaded
+          if (mqttUsername) {
+            setConfig(prev => ({ ...prev, username: mqttUsername, password: mqttPassword }));
+          }
           connectRef.current?.();
         }
       } catch (error) {
@@ -127,7 +151,7 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
     try {
       const parsed = JSON.parse(payload);
       if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
-        // Handle {TAG: "NAME", VALUE: x} shape (Bhua Bicchiya broker format)
+        // Handle {TAG: "NAME", VALUE: x} shape (Mohgaon broker format)
         const keys = Object.keys(parsed);
         const hasTag = keys.some(k => k.toUpperCase() === 'TAG');
         const hasVal = keys.some(k => k.toUpperCase() === 'VALUE');
@@ -211,7 +235,7 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
 
     try {
       const options: IClientOptions = {
-        clientId: config.clientId || `bhua_bicchiya_${Math.random().toString(16).substr(2, 8)}`,
+        clientId: config.clientId || `mohgaon_${Math.random().toString(16).substr(2, 8)}`,
         clean: true,
         connectTimeout: 10000,
         reconnectPeriod: 3000, // Native self-healing reconnect every 3s

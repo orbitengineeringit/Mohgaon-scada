@@ -1,11 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useScada } from '@/contexts/ScadaContext';
 import StatusBar from '@/components/StatusBar';
 import InstrumentCard from '@/components/InstrumentCard';
 import SortableCardGrid, { SortableItem } from '@/components/SortableCardGrid';
 import SortableSectionList from '@/components/SortableSectionList';
-import { WTP_SENSORS } from '@/config/buaBicchiyaSensors';
+import { WTP_SENSORS } from '@/config/mohgaonSensors';
 import { BarChart2, LayoutGrid, Activity } from 'lucide-react';
 import WtpIcon from '@/components/icons/WtpIcon';
 import CombinedPtGauge from '@/components/instruments/CombinedPtGauge';

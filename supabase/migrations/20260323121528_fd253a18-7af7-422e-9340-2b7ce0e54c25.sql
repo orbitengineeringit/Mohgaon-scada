@@ -2,12 +2,12 @@ INSERT INTO public.mqtt_config (broker_url, auto_connect, oht_topic, oht_topic_2
 VALUES (
   'wss://broker.hivemq.com:8884/mqtt',
   true,
-  'Orbit/BuaBicchiya/OHT0000000001',
-  'Orbit/BuaBicchiya/OHT0000000002',
-  'Orbit/BuaBicchiya/OHT0000000003',
-  'Orbit/BuaBicchiya/INTAKE0000001',
-  'Orbit/BuaBicchiya/WTP0000000001'
+  'Orbit/MOHGAON/OHT01/0000000001',
+  'Orbit/MOHGAON/OHT02/0000000001',
+  'Orbit/MOHGAON/OHT03/0000000001',
+  'Orbit/MOHGAON/INTAKE/0000000001',
+  'Orbit/MOHGAON/WTP/0000000001'
 );
 
 INSERT INTO public.plant_config (plant_name)
-VALUES ('Bua Bicchiya SCADA');
+VALUES ('Mohgaon SCADA');

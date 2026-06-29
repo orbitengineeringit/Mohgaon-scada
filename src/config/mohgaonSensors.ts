@@ -1,5 +1,5 @@
 /**
- * BHUA BICCHIYA SCADA - COMPLETE SENSOR CONFIGURATION
+ * MOHGAON SCADA - COMPLETE SENSOR CONFIGURATION
  * 
  * MQTT topic paths are loaded securely from the database at runtime.
  * Only topic keys (OHT1, OHT2, OHT3, INTAKE, WTP) are defined here.
@@ -12,7 +12,7 @@
 
 export type SectionType = 'oht' | 'intake' | 'wtp';
 
-export interface BuaBicchiyaSensor {
+export interface MohgaonSensor {
   id: string;
   mqttKey: string;
   label: string;
@@ -30,7 +30,7 @@ export interface BuaBicchiyaSensor {
 
 // ==================== OHT SENSORS ====================
 // Each OHT has: PT, Level, Flow In, Flow Out, FCV, Totalizer (computed)
-const createOhtSensors = (ohtNum: number): BuaBicchiyaSensor[] => {
+const createOhtSensors = (ohtNum: number): MohgaonSensor[] => {
   const prefix = `OHT${ohtNum}`;
   const sub = `OHT-${ohtNum}`;
   return [
@@ -51,7 +51,7 @@ export const ALL_OHT_SENSORS = [...OHT1_SENSORS, ...OHT2_SENSORS, ...OHT3_SENSOR
 
 // ==================== INTAKE SENSORS ====================
 // PT1, PT2, CombinedPT, Level, Flow, Totalizer (computed), KW (not installed), 2 VT Pumps (derived from PT)
-export const INTAKE_SENSORS: BuaBicchiyaSensor[] = [
+export const INTAKE_SENSORS: MohgaonSensor[] = [
   { id: 'INT-PT1', mqttKey: 'PT_01', label: 'Pressure 1 (PT)', unit: 'Bar', min: 0, max: 10, section: 'intake', type: 'analog', instrumentType: 'pt' },
   { id: 'INT-PT2', mqttKey: 'PT_02', label: 'Pressure 2 (PT)', unit: 'Bar', min: 0, max: 10, section: 'intake', type: 'analog', instrumentType: 'pt' },
   { id: 'INT-CombinedPT', mqttKey: 'PT_03', label: 'Combined Pressure (P1+P2)', unit: 'Bar', min: 0, max: 10, section: 'intake', type: 'analog', instrumentType: 'combined_pt' },
@@ -64,7 +64,7 @@ export const INTAKE_SENSORS: BuaBicchiyaSensor[] = [
 ];
 
 // ==================== WTP SENSORS ====================
-export const WTP_SENSORS: BuaBicchiyaSensor[] = [
+export const WTP_SENSORS: MohgaonSensor[] = [
   // Levels
   { id: 'WTP-LT-BW', mqttKey: 'BW_LEVEL', label: 'Level - Backwash', unit: '%', min: 0, max: 100, section: 'wtp', type: 'analog', instrumentType: 'lt', notInstalled: true },
   { id: 'WTP-LT-CW', mqttKey: 'CWR_LEVEL', label: 'Level - Clear Water', unit: '%', min: 0, max: 100, section: 'wtp', type: 'analog', instrumentType: 'lt' },
@@ -108,7 +108,7 @@ ALL_SENSORS.filter(s => s.derivedFromPt).forEach(pump => {
 // ==================== MQTT TOPICS ====================
 export const MQTT_TOPIC_KEYS = ['OHT1','OHT2','OHT3','OHT4','INTAKE','WTP'] as const;
 
-// Default topics for Bhua Bicchiya plant — overridable from DB config
+// Default topics for Mohgaon plant — overridable from DB config
 export const DEFAULT_MQTT_TOPICS: Record<string, string> = {
   INTAKE: 'Orbit/MOHGAON/INTAKE/0000000001',
   WTP:    'Orbit/MOHGAON/WTP/0000000001',
@@ -164,17 +164,17 @@ export const setTopicsFromDb = (topics: Record<string, string>) => {
 };
 
 // Get sensors for a specific subsection
-export const getSensorsForSubsection = (subsection: string): BuaBicchiyaSensor[] => {
+export const getSensorsForSubsection = (subsection: string): MohgaonSensor[] => {
   return ALL_SENSORS.filter(s => s.subsection === subsection);
 };
 
 // Get sensors for a section
-export const getSensorsForSection = (section: SectionType): BuaBicchiyaSensor[] => {
+export const getSensorsForSection = (section: SectionType): MohgaonSensor[] => {
   return ALL_SENSORS.filter(s => s.section === section);
 };
 
 // Get analog sensors only (for trends)
-export const getAnalogSensors = (section: SectionType, subsection?: string): BuaBicchiyaSensor[] => {
+export const getAnalogSensors = (section: SectionType, subsection?: string): MohgaonSensor[] => {
   return ALL_SENSORS.filter(s => 
     s.section === section && 
     s.type === 'analog' && 
@@ -183,7 +183,7 @@ export const getAnalogSensors = (section: SectionType, subsection?: string): Bua
 };
 
 // Get pump sensors
-export const getPumpSensors = (section: SectionType): BuaBicchiyaSensor[] => {
+export const getPumpSensors = (section: SectionType): MohgaonSensor[] => {
   return ALL_SENSORS.filter(s => s.section === section && s.instrumentType === 'pump');
 };
 

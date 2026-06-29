@@ -97,21 +97,21 @@ CREATE POLICY "Allow public update on consumption_data"
 ON public.consumption_data FOR UPDATE USING (true);
 
 -- Update mqtt_config to support WTP topic and multiple OHT topics
-ALTER TABLE public.mqtt_config ADD COLUMN IF NOT EXISTS wtp_topic TEXT NOT NULL DEFAULT 'Orbit/BuaBicchiya/WTP0000000001';
-ALTER TABLE public.mqtt_config ADD COLUMN IF NOT EXISTS oht_topic_2 TEXT NOT NULL DEFAULT 'Orbit/BuaBicchiya/OHT0000000002';
-ALTER TABLE public.mqtt_config ADD COLUMN IF NOT EXISTS oht_topic_3 TEXT NOT NULL DEFAULT 'Orbit/BuaBicchiya/OHT0000000003';
+ALTER TABLE public.mqtt_config ADD COLUMN IF NOT EXISTS wtp_topic TEXT NOT NULL DEFAULT 'Orbit/MOHGAON/WTP/0000000001';
+ALTER TABLE public.mqtt_config ADD COLUMN IF NOT EXISTS oht_topic_2 TEXT NOT NULL DEFAULT 'Orbit/MOHGAON/OHT02/0000000001';
+ALTER TABLE public.mqtt_config ADD COLUMN IF NOT EXISTS oht_topic_3 TEXT NOT NULL DEFAULT 'Orbit/MOHGAON/OHT03/0000000001';
 
--- Update default topics for BuaBicchiya
+-- Update default topics for Mohgaon
 UPDATE public.mqtt_config SET 
-  oht_topic = 'Orbit/BuaBicchiya/OHT0000000001',
-  oht_topic_2 = 'Orbit/BuaBicchiya/OHT0000000002',
-  oht_topic_3 = 'Orbit/BuaBicchiya/OHT0000000003',
-  intake_topic = 'Orbit/BuaBicchiya/INTAKE0000001',
-  wtp_topic = 'Orbit/BuaBicchiya/WTP0000000001'
+  oht_topic = 'Orbit/MOHGAON/OHT01/0000000001',
+  oht_topic_2 = 'Orbit/MOHGAON/OHT02/0000000001',
+  oht_topic_3 = 'Orbit/MOHGAON/OHT03/0000000001',
+  intake_topic = 'Orbit/MOHGAON/INTAKE/0000000001',
+  wtp_topic = 'Orbit/MOHGAON/WTP/0000000001'
 WHERE TRUE;
 
 -- Update plant name
-UPDATE public.plant_config SET plant_name = 'Bua Bicchiya SCADA' WHERE TRUE;
+UPDATE public.plant_config SET plant_name = 'Mohgaon SCADA' WHERE TRUE;
 
 -- Enable realtime for pump_analytics
 ALTER PUBLICATION supabase_realtime ADD TABLE public.pump_analytics;

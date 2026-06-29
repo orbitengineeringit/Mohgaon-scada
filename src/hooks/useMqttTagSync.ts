@@ -8,8 +8,8 @@ import { logError, logDebug, logWarn, logInfo } from '@/lib/errorLogger';
 import {
   ALL_OHT_SENSORS, INTAKE_SENSORS, WTP_SENSORS, ALL_SENSORS,
   VALID_OHT_KEYS, VALID_INTAKE_KEYS, VALID_WTP_KEYS,
-  BuaBicchiyaSensor, PT_TO_PUMP_MAP,
-} from '@/config/buaBicchiyaSensors';
+  MohgaonSensor, PT_TO_PUMP_MAP,
+} from '@/config/mohgaonSensors';
 
 interface TagUpdate {
   tagId: string;
@@ -23,7 +23,7 @@ const DISCONNECT_TIMEOUT_MS = 3000;
 const ABNORMAL_DELTA_PCT = 0.12;        // 12% of sensor range
 const FLUSH_INTERVAL_MS = 30 * 1000;    // batch-write queue to DB every 30s
 
-const isAbnormalReading = (sensor: BuaBicchiyaSensor, value: number): boolean => {
+const isAbnormalReading = (sensor: MohgaonSensor, value: number): boolean => {
   switch (sensor.instrumentType) {
     case 'pt':
     case 'combined_pt':
@@ -266,7 +266,7 @@ export const useMqttTagSync = (
     const { payload, section, subsection, topic } = message;
     if (section === 'unknown') return;
 
-    let sensors: BuaBicchiyaSensor[];
+    let sensors: MohgaonSensor[];
     let setter: React.Dispatch<React.SetStateAction<TagData[]>>;
     let tags: TagData[];
     let validKeys: string[];

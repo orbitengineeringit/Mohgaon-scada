@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { BuaBicchiyaSensor } from '@/config/buaBicchiyaSensors';
 import SensorStatusStrip from './SensorStatusStrip';
+import { useScada } from '@/contexts/ScadaContext';
 
 interface CircularGaugeProps {
   cx: number;
@@ -104,6 +105,7 @@ export interface OhtProcessSimulationProps {
 }
 
 const OhtProcessSimulation: React.FC<OhtProcessSimulationProps> = ({ sensors, tags, config }) => {
+  const { setOhtTags } = useScada();
   const getTag = (mqttKey: string) => tags.find(t => t.id === sensors.find(s => s.mqttKey === mqttKey)?.id);
   const getSensor = (mqttKey: string) => sensors.find(s => s.mqttKey === mqttKey);
 
@@ -116,6 +118,10 @@ const OhtProcessSimulation: React.FC<OhtProcessSimulationProps> = ({ sensors, ta
 
   const fOutTag = getTag('FLOW_OUT');
 
+  const fcvTag = getTag('FCV');
+  const fcvVal = fcvTag?.value || 0;
+  const fcvOpen = fcvVal > 0;
+
   const totalizerSensor = sensors.find(s => s.instrumentType === 'totalizer');
   const totTag = totalizerSensor ? tags.find(t => t.id === totalizerSensor.id) : null;
 
@@ -123,6 +129,18 @@ const OhtProcessSimulation: React.FC<OhtProcessSimulationProps> = ({ sensors, ta
   const fInVal = fInTag?.value || 0;
   const fOutVal = fOutTag?.value || 0;
   const totVal = totTag?.value || 0;
+
+  const handleFcvToggle = () => {
+    const fcvSensor = sensors.find(s => s.instrumentType === 'fcv');
+    if (!fcvSensor) return;
+    setOhtTags(prev => prev.map(t => {
+      if (t.id === fcvSensor.id) {
+        const newValue = t.value > 0 ? 0 : 100;
+        return { ...t, value: newValue, timestamp: new Date() };
+      }
+      return t;
+    }));
+  };
 
   // Visual constants matching IntakeProcessSimulation
   const pBody = "hsl(220 60% 42%)";
@@ -180,7 +198,8 @@ const OhtProcessSimulation: React.FC<OhtProcessSimulationProps> = ({ sensors, ta
 
   // Inlet Pipe (comes from extreme left ground, travels up to top of tank)
   const inPipeX = tcx - shaftW / 2 + 15;
-  const inPipePath = `M 10 ${pillarY + pillarH} L ${inPipeX} ${pillarY + pillarH} L ${inPipeX} ${ty}`;
+  const inPipeBeforeFcv = `M 10 ${pillarY + pillarH} L 660 ${pillarY + pillarH}`;
+  const inPipeAfterFcv = `M 660 ${pillarY + pillarH} L ${inPipeX} ${pillarY + pillarH} L ${inPipeX} ${ty}`;
   const outPipeX = tcx + shaftW / 2 - 15;
   const outPipePath = `M ${outPipeX} ${ty + th} L ${outPipeX} ${pillarY + pillarH} L ${svgW - 10} ${pillarY + pillarH}`;
 
@@ -269,10 +288,16 @@ const OhtProcessSimulation: React.FC<OhtProcessSimulationProps> = ({ sensors, ta
           <rect x={70} y={pillarY + pillarH + 18} width={svgW - 140} height="8" fill="#1e293b" rx="2" opacity="0.5" />
 
           {/* PIPES */}
-          {/* Inlet Pipe */}
+          {/* Inlet Pipe before FCV */}
           <g>
-            {drawPipe(inPipePath, pipeW)}
-            {drawWaterFlow(inPipePath, fInTag?.value || 0, (fInTag?.value || 0) > 0)}
+            {drawPipe(inPipeBeforeFcv, pipeW)}
+            {drawWaterFlow(inPipeBeforeFcv, fInVal, fInVal > 0)}
+          </g>
+
+          {/* Inlet Pipe after FCV */}
+          <g>
+            {drawPipe(inPipeAfterFcv, pipeW)}
+            {fcvOpen && drawWaterFlow(inPipeAfterFcv, fInVal, fInVal > 0)}
           </g>
 
           {/* Outlet Pipe */}
@@ -449,6 +474,74 @@ const OhtProcessSimulation: React.FC<OhtProcessSimulationProps> = ({ sensors, ta
             <path d={`M 500 ${pillarY + pillarH} L 500 ${pillarY + pillarH - 40}`} fill="none" stroke="#475569" strokeWidth="6" />
             <circle cx={500} cy={pillarY + pillarH} r="6" fill="#475569" />
             <CircularGauge cx={500} cy={pillarY + pillarH - 100} r={55} value={ptVal} min={0} max={10} label="PT Inlet" unit="Bar" />
+          </g>
+
+          {/* Flow Control Valve (FCV) on Inlet Pipe - Right side of PT Inlet */}
+          <g cursor="pointer" onClick={handleFcvToggle} className="select-none">
+            {/* Label */}
+            <text x={660} y={305} textAnchor="middle" className="fill-foreground font-bold text-sm" letterSpacing="0.5px">FCV</text>
+            <text x={660} y={320} textAnchor="middle" className="fill-muted-foreground font-medium text-[11px]">Flow Control Valve</text>
+
+            {/* Stem and Handwheel group with spin rotation transition */}
+            <g style={{
+              transform: fcvOpen ? "rotate(180deg)" : "rotate(0deg)",
+              transformOrigin: "660px 360px",
+              transition: "transform 0.8s cubic-bezier(0.4, 0, 0.2, 1)"
+            }}>
+              {/* Handwheel outer wheel */}
+              <circle cx={660} cy={360} r="18" fill="none" stroke="hsl(var(--muted-foreground))" strokeWidth="3" />
+              {/* Inner details / spokes of wheel */}
+              <circle cx={660} cy={360} r="10" fill="none" stroke="hsl(var(--muted-foreground))" strokeWidth="1" strokeDasharray="3 3" />
+              <line x1={660} y1={342} x2={660} y2={378} stroke="hsl(var(--muted-foreground))" strokeWidth="2.5" />
+              <line x1={642} y1={360} x2={678} y2={360} stroke="hsl(var(--muted-foreground))" strokeWidth="2.5" />
+              <circle cx={660} cy={360} r="4" fill="hsl(var(--muted-foreground))" />
+            </g>
+
+            {/* Non-rotating stem (actuator shaft) */}
+            <line x1={660} y1={360} x2={660} y2={417} stroke="hsl(var(--muted-foreground))" strokeWidth="4.5" strokeLinecap="round" />
+
+            {/* Valve Bonnet / Flange */}
+            <path d="M 648 417 L 672 417" stroke="hsl(var(--muted-foreground))" strokeWidth="3.5" />
+
+            {/* Valve Gate Chamber / Body Background (Enlarged) */}
+            <rect x="636" y="417" width="48" height="36" fill="hsl(var(--card))" stroke="hsl(var(--border))" strokeWidth="2" rx="4" />
+
+            {/* Slide Passage (indicates open pipe flow passage in background) */}
+            <rect x="644" y="425" width="32" height="20" fill="hsl(199, 89%, 48%, 0.15)" stroke="hsl(199, 89%, 48%, 0.3)" strokeWidth="1" rx="2" />
+
+            {/* Sliding Wedge/Gate Indicator (Visibly opens and closes) */}
+            <rect 
+              x="644" 
+              y={fcvOpen ? "398" : "423"} 
+              width="32" 
+              height="24" 
+              rx="2"
+              fill={fcvOpen ? "hsl(var(--success) / 0.1)" : "hsl(var(--destructive) / 0.15)"} 
+              stroke={fcvOpen ? "hsl(var(--success))" : "hsl(var(--destructive))"} 
+              strokeWidth="2" 
+              style={{ transition: "y 0.8s cubic-bezier(0.4, 0, 0.2, 1), fill 0.8s, stroke 0.8s", opacity: fcvOpen ? 0 : 0.95 }} 
+            />
+
+            {/* Realistic Gate Valve Triangles (overlay flanges) */}
+            <path d="M 636 417 L 636 453 L 660 435 Z" fill="none" stroke="hsl(var(--muted-foreground))" strokeWidth="2.5" strokeLinejoin="round" />
+            <path d="M 684 417 L 684 453 L 660 435 Z" fill="none" stroke="hsl(var(--muted-foreground))" strokeWidth="2.5" strokeLinejoin="round" />
+            <circle cx={660} cy={435} r="5" fill="hsl(var(--muted-foreground))" />
+
+            {/* Status Badge below pipe (larger & glowing) */}
+            <g className="transition-all duration-300">
+              <rect x={660 - 50} y={464} width="100" height="28" rx="8"
+                fill={fcvOpen ? "hsl(142, 71%, 45%, 0.1)" : "hsl(0, 84%, 60%, 0.1)"}
+                stroke={fcvOpen ? "hsl(var(--success))" : "hsl(var(--destructive))"}
+                strokeWidth="1.5"
+              />
+              <circle cx={660 - 32} cy={478} r="5" fill={fcvOpen ? "hsl(var(--success))" : "hsl(var(--destructive))"} className={fcvOpen ? "animate-pulse" : ""} />
+              <text x={660 + 10} y={483} textAnchor="middle" fontSize="12" fontWeight="900" fill={fcvOpen ? "hsl(var(--success))" : "hsl(var(--destructive))"} fontFamily="ui-monospace, monospace" letterSpacing="0.5px">
+                {fcvOpen ? 'OPEN' : 'CLOSED'}
+              </text>
+            </g>
+
+            {/* Tap to Toggle Text */}
+            <text x={660} y={510} textAnchor="middle" fontSize="10" fill="hsl(var(--muted-foreground))" fontWeight="600" className="animate-pulse">Tap to toggle</text>
           </g>
 
         </svg>

@@ -121,7 +121,7 @@ Deno.serve(async (req) => {
     // 2) Collect every needed tag id and fetch latest value per tag in one query
     const intakeIds = Object.values(TAG.intake);
     const wtpIds = Object.values(TAG.wtp);
-    const ohtIds = [1, 2, 3].flatMap(n => Object.values(TAG.oht(n)));
+    const ohtIds = [1, 2, 3, 4].flatMap(n => Object.values(TAG.oht(n)));
     const allIds = [...intakeIds, ...wtpIds, ...ohtIds];
 
     const { data: rows, error: hErr } = await supabase
@@ -176,9 +176,9 @@ Deno.serve(async (req) => {
             recordDateTime: nowIst,
           },
           pumps: [],
-          ohts: [1, 2, 3].map((n) => {
+          ohts: [1, 2, 3, 4].map((n) => {
             const t = TAG.oht(n);
-            const id = (cfg as any)[`oht${n}_device_id`];
+            const id = (cfg as any)[`oht${n}_device_id`] || `BHU_OHT_00${n}`;
             return {
               ohT_Device_id: id,
               inletFlow_mld: mld(v(t.flow)),

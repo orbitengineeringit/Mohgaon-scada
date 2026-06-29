@@ -14,12 +14,14 @@ const TANK_COLORS = [
   'hsl(199, 89%, 48%)',  // OHT-1 primary
   'hsl(38, 92%, 50%)',   // OHT-2 accent
   'hsl(142, 71%, 45%)',  // OHT-3 success
+  'hsl(271, 91%, 65%)',  // OHT-4 purple
 ];
 
 const TANK_BG_COLORS = [
   'hsl(199, 89%, 48%, 0.12)',
   'hsl(38, 92%, 50%, 0.12)',
   'hsl(142, 71%, 45%, 0.12)',
+  'hsl(271, 91%, 65%, 0.12)',
 ];
 
 interface TankData {
@@ -135,20 +137,20 @@ const OhtAnalyticsCard: React.FC = memo(() => {
   const { ohtTags } = useScada();
 
   const tankData: TankData[] = useMemo(() => {
-    return Array.from({ length: 3 }, (_, i) => {
+    return Array.from({ length: 4 }, (_, i) => {
       const prefix = `OHT${i + 1}`;
       const findVal = (key: string) => ohtTags.find(t => t.id === `${prefix}-${key}`)?.value ?? 0;
       return {
         label: `#${i + 1}`,
         level: findVal('LT'),
-        flow: findVal('Flow'),
+        flow: findVal('Flow-IN'),
         pressure: findVal('PT'),
       };
     });
   }, [ohtTags]);
 
   const totalFlow = tankData.reduce((s, t) => s + t.flow, 0);
-  const avgLevel = tankData.reduce((s, t) => s + t.level, 0) / 3;
+  const avgLevel = tankData.reduce((s, t) => s + t.level, 0) / 4;
   const activeTanks = tankData.filter(t => t.flow > 0 || t.level > 0).length;
 
   return (
@@ -162,7 +164,7 @@ const OhtAnalyticsCard: React.FC = memo(() => {
           </div>
           <span className="truncate font-bold">OHT Network Analytics</span>
           <span className="text-xs font-semibold text-muted-foreground ml-auto px-3 py-1 rounded-full bg-muted/80 ring-1 ring-border/50 shrink-0">
-            3 TANKS
+            4 TANKS
           </span>
         </CardTitle>
       </CardHeader>
@@ -170,7 +172,7 @@ const OhtAnalyticsCard: React.FC = memo(() => {
         <div className="space-y-6">
           <div className="grid grid-cols-3 gap-4">
             {[
-              { label: 'Active Tanks', value: `${activeTanks}/3`, icon: Activity, color: 'success', active: activeTanks > 0 },
+              { label: 'Active Tanks', value: `${activeTanks}/4`, icon: Activity, color: 'success', active: activeTanks > 0 },
               { label: 'Total Flow', value: `${totalFlow.toFixed(1)}`, unit: 'm³/hr', icon: Waves, color: 'primary', active: totalFlow > 0 },
               { label: 'Avg Level', value: `${avgLevel.toFixed(1)}`, unit: 'm', icon: Gauge, color: 'accent', active: avgLevel > 0 },
             ].map((kpi, i) => (

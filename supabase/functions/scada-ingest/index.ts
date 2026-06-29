@@ -17,7 +17,7 @@ type Sensor = {
   max: number;
   section: Section;
   subsection?: string;
-  instrumentType: "pt" | "lt" | "flow" | "totalizer" | "kw" | "ph" | "turbidity" | "chlorine" | "pump" | "combined_pt";
+  instrumentType: "pt" | "lt" | "flow" | "totalizer" | "kw" | "ph" | "turbidity" | "chlorine" | "pump" | "combined_pt" | "fcv";
 };
 type MqttConfig = {
   broker_url: string | null;
@@ -27,6 +27,7 @@ type MqttConfig = {
   oht_topic: string | null;
   oht_topic_2: string | null;
   oht_topic_3: string | null;
+  oht_topic_4: string | null;
 };
 type ParsedMessage = {
   topic: string;
@@ -42,6 +43,7 @@ const DEFAULT_TOPICS = {
   OHT1: "Orbit/BICHIYA/OHT01/0000000001",
   OHT2: "Orbit/BICHIYA/OHT02/0000000001",
   OHT3: "Orbit/BICHIYA/OHT03/0000000001",
+  OHT4: "Orbit/BICHIYA/OHT04/0000000001",
 };
 
 const ohtSensors = (n: number): Sensor[] => {
@@ -52,12 +54,13 @@ const ohtSensors = (n: number): Sensor[] => {
     { id: `${prefix}-LT`, mqttKey: "LEVEL", label: "Level (LT)", unit: "%", min: 0, max: 100, section: "oht", subsection, instrumentType: "lt" },
     { id: `${prefix}-Flow-IN`, mqttKey: "FLOW", label: "Flow Meter (Inlet)", unit: "m³/hr", min: 0, max: 50, section: "oht", subsection, instrumentType: "flow" },
     { id: `${prefix}-Flow-OUT`, mqttKey: "FLOW_OUT", label: "Flow Meter (Outlet)", unit: "m³/hr", min: 0, max: 50, section: "oht", subsection, instrumentType: "flow" },
+    { id: `${prefix}-FCV`, mqttKey: "FCV", label: "Flow Control Valve", unit: "%", min: 0, max: 100, section: "oht", subsection, instrumentType: "fcv" },
     { id: `${prefix}-Totalizer`, mqttKey: "TOTALIZER", label: "Totalizer", unit: "m³", min: 0, max: 999999, section: "oht", subsection, instrumentType: "totalizer" },
   ];
 };
 
 const SENSORS: Sensor[] = [
-  ...ohtSensors(1), ...ohtSensors(2), ...ohtSensors(3),
+  ...ohtSensors(1), ...ohtSensors(2), ...ohtSensors(3), ...ohtSensors(4),
   { id: "INT-PT1", mqttKey: "PT_01", label: "Pressure 1 (PT)", unit: "Bar", min: 0, max: 10, section: "intake", instrumentType: "pt" },
   { id: "INT-PT2", mqttKey: "PT_02", label: "Pressure 2 (PT)", unit: "Bar", min: 0, max: 10, section: "intake", instrumentType: "pt" },
   { id: "INT-CombinedPT", mqttKey: "PT_03", label: "Combined Pressure (P1+P2)", unit: "Bar", min: 0, max: 10, section: "intake", instrumentType: "combined_pt" },
@@ -148,6 +151,7 @@ function topicSetup(cfg: MqttConfig | null) {
     OHT1: cfg?.oht_topic || DEFAULT_TOPICS.OHT1,
     OHT2: cfg?.oht_topic_2 || DEFAULT_TOPICS.OHT2,
     OHT3: cfg?.oht_topic_3 || DEFAULT_TOPICS.OHT3,
+    OHT4: cfg?.oht_topic_4 || DEFAULT_TOPICS.OHT4,
   };
   const topicToSection = new Map<string, { section: Section; subsection?: string }>([
     [topics.INTAKE, { section: "intake" }],
@@ -155,6 +159,7 @@ function topicSetup(cfg: MqttConfig | null) {
     [topics.OHT1, { section: "oht", subsection: "OHT-1" }],
     [topics.OHT2, { section: "oht", subsection: "OHT-2" }],
     [topics.OHT3, { section: "oht", subsection: "OHT-3" }],
+    [topics.OHT4, { section: "oht", subsection: "OHT-4" }],
   ]);
   return { topics: Object.values(topics).filter(Boolean), topicToSection };
 }
@@ -191,7 +196,7 @@ async function collectSnapshot(cfg: MqttConfig | null): Promise<ParsedMessage[]>
 
   return await new Promise((resolve, reject) => {
     const client = mqtt.connect(brokerUrl, {
-      clientId: `${cfg?.client_id || "bua-bicchiya-backend"}-${crypto.randomUUID().slice(0, 8)}`,
+      clientId: `${cfg?.client_id || "mohgaon-backend"}-${crypto.randomUUID().slice(0, 8)}`,
       clean: true,
       connectTimeout: 10_000,
       reconnectPeriod: 0,

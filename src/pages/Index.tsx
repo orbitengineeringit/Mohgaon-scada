@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useScada } from '@/contexts/ScadaContext';
 import StatusBar from '@/components/StatusBar';
 import MiniSparkline from '@/components/instruments/MiniSparkline';
-import { ArrowRight, Building2, Droplet, Cpu } from 'lucide-react';
+import { ArrowRight, Building2, Droplet, Cpu, UserCheck } from 'lucide-react';
 
 const Index = () => {
   const { intakeTags, ohtTags, wtpTags, getActiveTagCount, isLoading } = useScada();
@@ -303,7 +303,7 @@ const Index = () => {
               </h2>
               
               <div className="inline-block px-4 py-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200/50 dark:border-slate-700/50 text-slate-700 dark:text-slate-200 font-bold text-sm sm:text-base md:text-lg shadow-sm">
-                Bua Bichhiya Nagar Parishad, Distt. <span className="bg-gradient-to-r from-blue-500 to-indigo-500 dark:from-cyan-400 dark:to-blue-400 bg-clip-text text-transparent font-black">Mandla</span>
+                Mohgaon Nagar Parishad, Distt. <span className="bg-gradient-to-r from-blue-500 to-indigo-500 dark:from-cyan-400 dark:to-blue-400 bg-clip-text text-transparent font-black">Chhindwara</span>
               </div>
               
               <div className="flex items-center gap-3 pt-2">
@@ -330,7 +330,7 @@ const Index = () => {
                 </div>
                 <div className="mt-2">
                   <p className="text-xs sm:text-sm font-bold text-foreground leading-snug">Chief Municipal Officer</p>
-                  <p className="text-[10px] font-semibold text-muted-foreground/80 mt-0.5">NP Bhua Bicchiya</p>
+                  <p className="text-[10px] font-semibold text-muted-foreground/80 mt-0.5">NP Mohgaon (Chhindwara)</p>
                 </div>
               </div>
 
@@ -346,15 +346,15 @@ const Index = () => {
                 </div>
               </div>
 
-              {/* Card 3: System Status */}
+              {/* Card 3: Contract Agency */}
               <div className="p-4 rounded-2xl bg-slate-50/50 dark:bg-slate-900/30 border border-slate-200/50 dark:border-slate-800/50 flex flex-col justify-between min-h-[96px] shadow-sm">
                 <div className="flex items-center justify-between">
-                  <span className="text-[9px] font-extrabold text-muted-foreground uppercase tracking-wider">System Integration</span>
-                  <Cpu className="w-4 h-4 text-violet-500" />
+                  <span className="text-[9px] font-extrabold text-muted-foreground uppercase tracking-wider">Contract Agency</span>
+                  <UserCheck className="w-4 h-4 text-violet-500" />
                 </div>
                 <div className="mt-2">
-                  <p className="text-xs sm:text-sm font-bold text-foreground leading-snug">PLC & Instruments</p>
-                  <p className="text-[10px] font-semibold text-muted-foreground/80 mt-0.5">Fully Integrated</p>
+                  <p className="text-xs sm:text-sm font-bold text-foreground leading-snug">M/s Dilip Patidar</p>
+                  <p className="text-[10px] font-semibold text-muted-foreground/80 mt-0.5">Contractor</p>
                 </div>
               </div>
 

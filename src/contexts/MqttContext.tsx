@@ -88,6 +88,7 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
               OHT1: data.oht_topic,
               OHT2: (data as any).oht_topic_2 || '',
               OHT3: (data as any).oht_topic_3 || '',
+              OHT4: (data as any).oht_topic_4 || '',
               INTAKE: data.intake_topic,
               WTP: (data as any).wtp_topic || '',
             },
@@ -96,6 +97,7 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
             OHT1: data.oht_topic,
             OHT2: (data as any).oht_topic_2 || '',
             OHT3: (data as any).oht_topic_3 || '',
+            OHT4: (data as any).oht_topic_4 || '',
             INTAKE: data.intake_topic,
             WTP: (data as any).wtp_topic || '',
           });
@@ -175,12 +177,16 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
       if (topic.includes('OHT03') || topic.includes('OHT-3') || topic.includes('OHT3')) {
         return { section: 'oht', subsection: 'OHT-3' };
       }
+      if (topic.includes('OHT04') || topic.includes('OHT-4') || topic.includes('OHT4')) {
+        return { section: 'oht', subsection: 'OHT-4' };
+      }
       // Fallback matching logic based on topic tail/identifier
-      if (topic.endsWith('/0000000001') && !topic.includes('OHT02') && !topic.includes('OHT03')) {
+      if (topic.endsWith('/0000000001') && !topic.includes('OHT02') && !topic.includes('OHT03') && !topic.includes('OHT04')) {
         return { section: 'oht', subsection: 'OHT-1' };
       }
       if (topic.endsWith('/0000000002') || topic.includes('0000000002')) return { section: 'oht', subsection: 'OHT-2' };
       if (topic.endsWith('/0000000003') || topic.includes('0000000003')) return { section: 'oht', subsection: 'OHT-3' };
+      if (topic.endsWith('/0000000004') || topic.includes('0000000004')) return { section: 'oht', subsection: 'OHT-4' };
       return { section: 'oht' };
     }
     if (topic.includes('INTAKE') || topic.includes('INT')) return { section: 'intake' };
@@ -292,6 +298,7 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
         oht_topic: config.topics.OHT1 || MQTT_TOPICS.OHT1,
         oht_topic_2: config.topics.OHT2 || MQTT_TOPICS.OHT2,
         oht_topic_3: config.topics.OHT3 || MQTT_TOPICS.OHT3,
+        oht_topic_4: config.topics.OHT4 || MQTT_TOPICS.OHT4,
         intake_topic: config.topics.INTAKE || MQTT_TOPICS.INTAKE,
         wtp_topic: config.topics.WTP || MQTT_TOPICS.WTP,
         auto_connect: config.autoConnect,

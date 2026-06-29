@@ -29,7 +29,7 @@ export interface BuaBicchiyaSensor {
 }
 
 // ==================== OHT SENSORS ====================
-// Each OHT has: PT, Level, Flow In, Flow Out, Totalizer (computed)
+// Each OHT has: PT, Level, Flow In, Flow Out, FCV, Totalizer (computed)
 const createOhtSensors = (ohtNum: number): BuaBicchiyaSensor[] => {
   const prefix = `OHT${ohtNum}`;
   const sub = `OHT-${ohtNum}`;
@@ -38,7 +38,7 @@ const createOhtSensors = (ohtNum: number): BuaBicchiyaSensor[] => {
     { id: `${prefix}-LT`, mqttKey: 'LEVEL', label: 'Level (LT)', unit: '%', min: 0, max: 100, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'lt' },
     { id: `${prefix}-Flow-IN`, mqttKey: 'FLOW', label: 'Flow Meter (Inlet)', unit: 'm³/hr', min: 0, max: 50, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'flow' },
     { id: `${prefix}-Flow-OUT`, mqttKey: 'FLOW_OUT', label: 'Flow Meter (Outlet)', unit: 'm³/hr', min: 0, max: 50, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'flow', notInstalled: true },
-    { id: `${prefix}-FCV`, mqttKey: 'FCV', label: 'Flow Control Valve', unit: '%', min: 0, max: 100, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'fcv', notInstalled: true },
+    { id: `${prefix}-FCV`, mqttKey: 'FCV', label: 'Flow Control Valve', unit: '%', min: 0, max: 100, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'fcv' },
     { id: `${prefix}-Totalizer`, mqttKey: 'TOTALIZER', label: 'Totalizer', unit: 'm³', min: 0, max: 999999, section: 'oht', subsection: sub, type: 'totalizer', instrumentType: 'totalizer' },
   ];
 };
@@ -46,7 +46,8 @@ const createOhtSensors = (ohtNum: number): BuaBicchiyaSensor[] => {
 export const OHT1_SENSORS = createOhtSensors(1);
 export const OHT2_SENSORS = createOhtSensors(2);
 export const OHT3_SENSORS = createOhtSensors(3);
-export const ALL_OHT_SENSORS = [...OHT1_SENSORS, ...OHT2_SENSORS, ...OHT3_SENSORS];
+export const OHT4_SENSORS = createOhtSensors(4);
+export const ALL_OHT_SENSORS = [...OHT1_SENSORS, ...OHT2_SENSORS, ...OHT3_SENSORS, ...OHT4_SENSORS];
 
 // ==================== INTAKE SENSORS ====================
 // PT1, PT2, CombinedPT, Level, Flow, Totalizer (computed), KW (not installed), 2 VT Pumps (derived from PT)
@@ -105,15 +106,16 @@ ALL_SENSORS.filter(s => s.derivedFromPt).forEach(pump => {
 });
 
 // ==================== MQTT TOPICS ====================
-export const MQTT_TOPIC_KEYS = ['OHT1','OHT2','OHT3','INTAKE','WTP'] as const;
+export const MQTT_TOPIC_KEYS = ['OHT1','OHT2','OHT3','OHT4','INTAKE','WTP'] as const;
 
 // Default topics for Bhua Bicchiya plant — overridable from DB config
 export const DEFAULT_MQTT_TOPICS: Record<string, string> = {
-  INTAKE: 'Orbit/BICHIYA/INTAKE/0000000001',
-  WTP:    'Orbit/BICHIYA/WTP/0000000001',
-  OHT1:   'Orbit/BICHIYA/OHT01/0000000001',
-  OHT2:   'Orbit/BICHIYA/OHT02/0000000001',
-  OHT3:   'Orbit/BICHIYA/OHT03/0000000001',
+  INTAKE: 'Orbit/MOHGAON/INTAKE/0000000001',
+  WTP:    'Orbit/MOHGAON/WTP/0000000001',
+  OHT1:   'Orbit/MOHGAON/OHT01/0000000001',
+  OHT2:   'Orbit/MOHGAON/OHT02/0000000001',
+  OHT3:   'Orbit/MOHGAON/OHT03/0000000001',
+  OHT4:   'Orbit/MOHGAON/OHT04/0000000001',
 };
 
 // Mutable map — initialized with defaults, may be overridden from DB
@@ -121,19 +123,21 @@ export const MQTT_TOPICS: Record<string, string> = { ...DEFAULT_MQTT_TOPICS };
 
 // Built dynamically when topics are loaded from DB
 export const TOPIC_TO_SECTION: Record<string, { section: SectionType; subsection?: string }> = {
-  'Orbit/BICHIYA/INTAKE/0000000001': { section: 'intake' },
-  'Orbit/BICHIYA/WTP/0000000001': { section: 'wtp' },
-  'Orbit/BICHIYA/OHT01/0000000001': { section: 'oht', subsection: 'OHT-1' },
-  'Orbit/BICHIYA/OHT02/0000000001': { section: 'oht', subsection: 'OHT-2' },
-  'Orbit/BICHIYA/OHT03/0000000001': { section: 'oht', subsection: 'OHT-3' },
+  'Orbit/MOHGAON/INTAKE/0000000001': { section: 'intake' },
+  'Orbit/MOHGAON/WTP/0000000001': { section: 'wtp' },
+  'Orbit/MOHGAON/OHT01/0000000001': { section: 'oht', subsection: 'OHT-1' },
+  'Orbit/MOHGAON/OHT02/0000000001': { section: 'oht', subsection: 'OHT-2' },
+  'Orbit/MOHGAON/OHT03/0000000001': { section: 'oht', subsection: 'OHT-3' },
+  'Orbit/MOHGAON/OHT04/0000000001': { section: 'oht', subsection: 'OHT-4' },
 };
 
 export const ALL_MQTT_TOPICS: string[] = [
-  'Orbit/BICHIYA/INTAKE/0000000001',
-  'Orbit/BICHIYA/WTP/0000000001',
-  'Orbit/BICHIYA/OHT01/0000000001',
-  'Orbit/BICHIYA/OHT02/0000000001',
-  'Orbit/BICHIYA/OHT03/0000000001',
+  'Orbit/MOHGAON/INTAKE/0000000001',
+  'Orbit/MOHGAON/WTP/0000000001',
+  'Orbit/MOHGAON/OHT01/0000000001',
+  'Orbit/MOHGAON/OHT02/0000000001',
+  'Orbit/MOHGAON/OHT03/0000000001',
+  'Orbit/MOHGAON/OHT04/0000000001',
 ];
 
 /** Called by MqttContext after loading topics from database */
@@ -146,6 +150,7 @@ export const setTopicsFromDb = (topics: Record<string, string>) => {
     OHT1: { section: 'oht', subsection: 'OHT-1' },
     OHT2: { section: 'oht', subsection: 'OHT-2' },
     OHT3: { section: 'oht', subsection: 'OHT-3' },
+    OHT4: { section: 'oht', subsection: 'OHT-4' },
     INTAKE: { section: 'intake' },
     WTP: { section: 'wtp' },
   };

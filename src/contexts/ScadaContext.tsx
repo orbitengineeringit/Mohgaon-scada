@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { logError, logDebug } from '@/lib/errorLogger';
 import {
   ALL_OHT_SENSORS, INTAKE_SENSORS, WTP_SENSORS, ALL_SENSORS,
-  BuaBicchiyaSensor, OHT1_SENSORS, OHT2_SENSORS, OHT3_SENSORS,
+  BuaBicchiyaSensor, OHT1_SENSORS, OHT2_SENSORS, OHT3_SENSORS, OHT4_SENSORS,
 } from '@/config/buaBicchiyaSensors';
 
 /** Get default setpoints based on instrument type and range */
@@ -104,7 +104,7 @@ const sensorToTag = (sensor: BuaBicchiyaSensor): TagData => ({
 const ScadaContext = createContext<ScadaContextType | undefined>(undefined);
 
 export const ScadaProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [plantName, setPlantNameState] = useState('Bhua Bicchiya SCADA');
+  const [plantName, setPlantNameState] = useState('Mohgaon SCADA');
   const [configMode, setConfigModeState] = useState(false);
   const [intakeTags, setIntakeTags] = useState<TagData[]>(() => INTAKE_SENSORS.map(sensorToTag));
   const [ohtTags, setOhtTags] = useState<TagData[]>(() => ALL_OHT_SENSORS.map(sensorToTag));

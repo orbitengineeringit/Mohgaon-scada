@@ -5,7 +5,7 @@ import StatusBar from '@/components/StatusBar';
 import InstrumentCard from '@/components/InstrumentCard';
 import SortableCardGrid, { SortableItem } from '@/components/SortableCardGrid';
 import SortableSectionList from '@/components/SortableSectionList';
-import { OHT1_SENSORS, OHT2_SENSORS, OHT3_SENSORS, BuaBicchiyaSensor } from '@/config/buaBicchiyaSensors';
+import { OHT1_SENSORS, OHT2_SENSORS, OHT3_SENSORS, OHT4_SENSORS, BuaBicchiyaSensor } from '@/config/buaBicchiyaSensors';
 import OhtAnalyticsCard from '@/components/OhtAnalyticsCard';
 import { BarChart2, LayoutGrid, Activity } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -103,22 +103,28 @@ const OhtPage: React.FC = () => {
 
   const ohtConfigs: OhtConfig[] = [
     {
-      title: 'OHT-1 - WTP Campus', label: '#1', color: 'bg-primary', colorHsl: '199 89% 48%',
+      title: 'OHT-1', label: '#1', color: 'bg-primary', colorHsl: '199 89% 48%',
       borderColor: 'border-primary/20', bgColor: 'bg-primary/[0.03]', iconBg: 'bg-primary/10',
-      sensors: OHT1_SENSORS, startIndex: 0, capacity: '4 instruments • PT, LT, Flow In, Totalizer',
+      sensors: OHT1_SENSORS, startIndex: 0, capacity: '5 instruments • PT, LT, Flow In, FCV, Totalizer',
       groupKey: 'oht-1',
     },
     {
-      title: 'OHT-2 - Block Colony', label: '#2', color: 'bg-accent', colorHsl: '38 92% 50%',
+      title: 'OHT-2', label: '#2', color: 'bg-accent', colorHsl: '38 92% 50%',
       borderColor: 'border-accent/20', bgColor: 'bg-accent/[0.03]', iconBg: 'bg-accent/10',
-      sensors: OHT2_SENSORS, startIndex: 5, capacity: '4 instruments • PT, LT, Flow In, Totalizer',
+      sensors: OHT2_SENSORS, startIndex: 5, capacity: '5 instruments • PT, LT, Flow In, FCV, Totalizer',
       groupKey: 'oht-2',
     },
     {
-      title: 'OHT-3 - Bapa School', label: '#3', color: 'bg-success', colorHsl: '142 71% 45%',
+      title: 'OHT-3', label: '#3', color: 'bg-success', colorHsl: '142 71% 45%',
       borderColor: 'border-success/20', bgColor: 'bg-success/[0.03]', iconBg: 'bg-success/10',
-      sensors: OHT3_SENSORS, startIndex: 10, capacity: '4 instruments • PT, LT, Flow In, Totalizer',
+      sensors: OHT3_SENSORS, startIndex: 10, capacity: '5 instruments • PT, LT, Flow In, FCV, Totalizer',
       groupKey: 'oht-3',
+    },
+    {
+      title: 'OHT-4', label: '#4', color: 'bg-indigo-500', colorHsl: '271 91% 65%',
+      borderColor: 'border-indigo-500/20', bgColor: 'bg-indigo-500/[0.03]', iconBg: 'bg-indigo-500/10',
+      sensors: OHT4_SENSORS, startIndex: 15, capacity: '5 instruments • PT, LT, Flow In, FCV, Totalizer',
+      groupKey: 'oht-4',
     },
   ];
 
@@ -143,7 +149,7 @@ const OhtPage: React.FC = () => {
             </div>
             <div className="min-w-0">
               <h2 className="text-xl leading-tight md:text-2xl font-bold text-foreground">Overhead Tanks (OHT)</h2>
-              <p className="text-sm text-muted-foreground">3 OHT units × 4 instruments each</p>
+              <p className="text-sm text-muted-foreground">4 OHT units × 5 instruments each</p>
             </div>
           </div>
           <div className="flex w-full flex-wrap items-center gap-2 sm:gap-3 sm:w-auto sm:flex-nowrap sm:justify-end">

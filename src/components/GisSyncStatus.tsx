@@ -32,6 +32,7 @@ const DEVICES = [
   { key: 'oht1', id: 'BHU_OHT_001', label: 'OHT-1' },
   { key: 'oht2', id: 'BHU_OHT_002', label: 'OHT-2' },
   { key: 'oht3', id: 'BHU_OHT_003', label: 'OHT-3' },
+  { key: 'oht4', id: 'BHU_OHT_004', label: 'OHT-4' },
 ] as const;
 
 const GisSyncStatus = () => {
@@ -114,12 +115,12 @@ const GisSyncStatus = () => {
       { param: 'Backwash Level', value: f(get(wtpTags, 'WTP-LT-BW'), 2), unit: 'm', sensorId: 'WTP-LT-BW' },
       { param: 'Header Pressure', value: f(get(wtpTags, 'WTP-CombinedPT1'), 2), unit: 'Bar', sensorId: 'WTP-CombinedPT1' },
     ];
-    const ohtFor = (n: 1 | 2 | 3): ParamRow[] => ([
+    const ohtFor = (n: 1 | 2 | 3 | 4): ParamRow[] => ([
       { param: 'LT', value: f(get(ohtTags, `OHT${n}-LT`), 2), unit: 'm', sensorId: `OHT${n}-LT` },
       { param: 'Flow In', value: f(get(ohtTags, `OHT${n}-Flow-IN`), 3), unit: `m³/hr (${mld(get(ohtTags, `OHT${n}-Flow-IN`))} MLD)`, sensorId: `OHT${n}-Flow-IN` },
       { param: 'Pressure', value: f(get(ohtTags, `OHT${n}-PT`), 3), unit: 'Bar', sensorId: `OHT${n}-PT` },
     ]);
-    return { intake, wtp, oht1: ohtFor(1), oht2: ohtFor(2), oht3: ohtFor(3) } as Record<string, ParamRow[]>;
+    return { intake, wtp, oht1: ohtFor(1), oht2: ohtFor(2), oht3: ohtFor(3), oht4: ohtFor(4) } as Record<string, ParamRow[]>;
   }, [intakeTags, ohtTags, wtpTags]);
 
   const copyProof = (log: SyncLog) => {

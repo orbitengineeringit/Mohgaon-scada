@@ -1,4 +1,4 @@
-# Bhua Bicchiya SCADA - Water Treatment Plant Monitoring System
+# Mohgaon SCADA - Water Treatment Plant Monitoring System
 
 Built with React + Vite + Supabase + Vercel
 
@@ -7,6 +7,6 @@ Built with React + Vite + Supabase + Vercel
 - UI: shadcn/ui + TailwindCSS
 - Backend: Supabase (PostgreSQL + Edge Functions)
 - Hosting: Vercel
-- MQTT: EMQX Broker
+- MQTT: HIVEMQ Broker
 - GIS: MP Urban GIS Portal (MPGARUD)
 

@@ -149,7 +149,7 @@ export const useMqttTagSync = (
             value: 0,
             unit: '',
             type: 'Disconnect',
-            message: 'SCADA Server Gateway Offline: Complete cellular telemetry/internet connection loss suspected at WTP Server',
+            message: 'SCADA Server Gateway Offline: Complete cellular sensor/internet connection loss suspected at WTP Server',
             section: 'wtp',
           });
         }
@@ -331,7 +331,7 @@ export const useMqttTagSync = (
           alarmActiveSince.current.set(faultKey, nowTime);
         } else if (nowTime - faultStart > 30000) {
           const type = isNegativeOverflow ? 'Sensor Wire Break' : 'Signal Overflow';
-          const msg = `Telemetry Fault: ${sensor.label} (${sensorId}) is reading corrupt value: ${value}. (${type})`;
+          const msg = `Sensor Fault: ${sensor.label} (${sensorId}) is reading corrupt value: ${value}. (${type})`;
           addAlarm({
             tagId: sensorId, tagConfigId: existingTag?.dbId, label: sensor.label,
             value: 0, unit: sensor.unit, type: 'Low', message: msg,
@@ -343,7 +343,7 @@ export const useMqttTagSync = (
 
       alarmActiveSince.current.delete(`${sensorId}-SignalFault`);
 
-      // --- MLTCV Layer 1: Rate-of-Change (ROC) Telemetry Limiter ---
+      // --- MLTCV Layer 1: Rate-of-Change (ROC) Sensor Limiter ---
       const prevVal = existingTag ? existingTag.value : null;
       let rawValueAdjusted = value;
       if (prevVal !== null && existingTag.status === 'connected') {
@@ -355,7 +355,7 @@ export const useMqttTagSync = (
             const noiseStart = alarmActiveSince.current.get(noiseKey);
             if (!noiseStart) {
               alarmActiveSince.current.set(noiseKey, nowTime);
-              const msg = `Telemetry Warning: Pressure Telemetry Noise detected on ${sensor.label} (Raw change of ${delta.toFixed(2)} Bar clamped to 0.5 Bar)`;
+              const msg = `Sensor Warning: Pressure Sensor Noise detected on ${sensor.label} (Raw change of ${delta.toFixed(2)} Bar clamped to 0.5 Bar)`;
               addAlarm({
                 tagId: sensorId, tagConfigId: existingTag?.dbId, label: sensor.label,
                 value: value, unit: sensor.unit, type: 'Low', message: msg,
@@ -374,7 +374,7 @@ export const useMqttTagSync = (
             const noiseStart = alarmActiveSince.current.get(noiseKey);
             if (!noiseStart) {
               alarmActiveSince.current.set(noiseKey, nowTime);
-              const msg = `Telemetry Warning: Level Telemetry Noise detected on ${sensor.label} (Raw change of ${delta.toFixed(2)} ${sensor.unit} clamped)`;
+              const msg = `Sensor Warning: Level Sensor Noise detected on ${sensor.label} (Raw change of ${delta.toFixed(2)} ${sensor.unit} clamped)`;
               addAlarm({
                 tagId: sensorId, tagConfigId: existingTag?.dbId, label: sensor.label,
                 value: value, unit: sensor.unit, type: 'Low', message: msg,
@@ -420,7 +420,7 @@ export const useMqttTagSync = (
             const jitterStart = alarmActiveSince.current.get(jitterKey);
             if (!jitterStart) {
               alarmActiveSince.current.set(jitterKey, nowTime);
-              const msg = `Telemetry Fault: Level Sensor Echo Jitter detected on ${sensor.label} (Level increased by ${levelDelta.toFixed(2)}% while inlet flow is zero)`;
+              const msg = `Sensor Fault: Level Sensor Echo Jitter detected on ${sensor.label} (Level increased by ${levelDelta.toFixed(2)}% while inlet flow is zero)`;
               addAlarm({
                 tagId: sensorId, tagConfigId: existingTag?.dbId, label: sensor.label,
                 value: displayValue, unit: sensor.unit, type: 'Low', message: msg,
@@ -455,7 +455,7 @@ export const useMqttTagSync = (
           const frozenStart = alarmActiveSince.current.get(frozenKey);
           if (!frozenStart) {
             alarmActiveSince.current.set(frozenKey, nowTime);
-            const msg = `Telemetry Fault: ${sensor.label} (${sensorId}) is frozen at exactly ${displayValue.toFixed(2)} ${sensor.unit} (No signal jitter for 30 min)`;
+            const msg = `Sensor Fault: ${sensor.label} (${sensorId}) is frozen at exactly ${displayValue.toFixed(2)} ${sensor.unit} (No signal jitter for 30 min)`;
             addAlarm({
               tagId: sensorId, tagConfigId: existingTag?.dbId, label: sensor.label,
               value: displayValue, unit: sensor.unit, type: 'Low', message: msg,
@@ -785,7 +785,7 @@ export const useMqttTagSync = (
           if (!turbStart) {
             alarmActiveSince.current.set(turbKey, nowTime);
             const tag = tags.find(t => t.id === ltId);
-            const msg = `Telemetry Warning: Level Sensor Turbulence / Jitter filter triggered on ${tag?.label || ltId} (fluctuation of ${delta.toFixed(1)}% ignored)`;
+            const msg = `Sensor Warning: Level Sensor Turbulence / Jitter filter triggered on ${tag?.label || ltId} (fluctuation of ${delta.toFixed(1)}% ignored)`;
             addAlarm({
               tagId: ltId, tagConfigId: tag?.dbId, label: tag?.label || ltId,
               value: ltVal, unit: tag?.unit || '%', type: 'Low', message: msg,
@@ -1165,7 +1165,7 @@ export const useMqttTagSync = (
         if (!ptDiscStart) {
           alarmActiveSince.current.set(ptDiscKey, nowTime);
         } else if (nowTime - ptDiscStart > 30000) {
-          const msg = `Telemetry Fault: Intake Pressure Transmitters Discrepancy (Flow active ${flowVal.toFixed(1)} m³/hr, but both pressures read < 0.2 Bar)`;
+          const msg = `Sensor Fault: Intake Pressure Transmitters Discrepancy (Flow active ${flowVal.toFixed(1)} m³/hr, but both pressures read < 0.2 Bar)`;
           addAlarm({
             tagId: 'INT-CombinedPT', tagConfigId: pt1Tag.dbId, label: 'Combined Pressure',
             value: 0, unit: 'Bar', type: 'Low', message: msg,
@@ -1182,7 +1182,7 @@ export const useMqttTagSync = (
         if (!ltDiscStart) {
           alarmActiveSince.current.set(ltDiscKey, nowTime);
         } else if (nowTime - ltDiscStart > 30000) {
-          const msg = `Telemetry Fault: Intake Suction Level Discrepancy (Flow active ${flowVal.toFixed(1)} m³/hr, but level sensor reads near-empty ${level.toFixed(2)}m)`;
+          const msg = `Sensor Fault: Intake Suction Level Discrepancy (Flow active ${flowVal.toFixed(1)} m³/hr, but level sensor reads near-empty ${level.toFixed(2)}m)`;
           addAlarm({
             tagId: 'INT-LT', tagConfigId: ltTag.dbId, label: 'Intake Level',
             value: level, unit: 'm', type: 'Low', message: msg,
@@ -1211,7 +1211,7 @@ export const useMqttTagSync = (
         if (!ptDiscStart) {
           alarmActiveSince.current.set(ptDiscKey, nowTime);
         } else if (nowTime - ptDiscStart > 30000) {
-          const msg = `Telemetry Fault: WTP Discharge Pressures Discrepancy (Flow active ${flowVal.toFixed(1)} m³/hr, but both pressures read < 0.2 Bar)`;
+          const msg = `Sensor Fault: WTP Discharge Pressures Discrepancy (Flow active ${flowVal.toFixed(1)} m³/hr, but both pressures read < 0.2 Bar)`;
           addAlarm({
             tagId: 'WTP-CombinedPT1', tagConfigId: pt1Tag.dbId, label: 'Combined Pressure',
             value: 0, unit: 'Bar', type: 'Low', message: msg,
@@ -1228,7 +1228,7 @@ export const useMqttTagSync = (
         if (!ltDiscStart) {
           alarmActiveSince.current.set(ltDiscKey, nowTime);
         } else if (nowTime - ltDiscStart > 30000) {
-          const msg = `Telemetry Fault: WTP CWR Level Discrepancy (Flow active ${flowVal.toFixed(1)} m³/hr, but level sensor reads near-empty ${level.toFixed(1)}%)`;
+          const msg = `Sensor Fault: WTP CWR Level Discrepancy (Flow active ${flowVal.toFixed(1)} m³/hr, but level sensor reads near-empty ${level.toFixed(1)}%)`;
           addAlarm({
             tagId: 'WTP-LT-CW', tagConfigId: ltTag.dbId, label: 'CWR Level',
             value: level, unit: '%', type: 'Low', message: msg,

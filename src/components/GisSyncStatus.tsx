@@ -157,7 +157,7 @@ const GisSyncStatus = () => {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <button
-          title="MP GIS Telemetry Sync"
+          title="MP GIS Sensor Sync"
           className="flex items-center gap-1 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-lg text-[9px] sm:text-[10px] font-bold border bg-primary/10 text-primary border-primary/20 hover:bg-primary/20 transition"
         >
           <Satellite className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
@@ -174,7 +174,7 @@ const GisSyncStatus = () => {
               </div>
               <div className="min-w-0">
                 <DialogTitle className="text-sm sm:text-lg font-bold tracking-tight leading-tight text-left">
-                  MPGARUD GIS Lab API · Telemetry Sync Details
+                  MPGARUD GIS Lab API · Sensor Sync Details
                 </DialogTitle>
                 <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 text-left">
                   Real-time integration data pipeline for Directorate of Urban Administration & Development, Bhopal.
@@ -248,10 +248,10 @@ const GisSyncStatus = () => {
             </div>
           </div>
 
-          {/* Telemetry Sync Board */}
+          {/* Sensor Sync Board */}
           <div>
             <div className="flex flex-col sm:flex-row sm:items-baseline gap-0.5 sm:gap-2 mb-2">
-              <h3 className="text-xs font-bold tracking-wider text-foreground">TELEMETRY SYNC BOARD</h3>
+              <h3 className="text-xs font-bold tracking-wider text-foreground">SENSOR SYNC BOARD</h3>
               <span className="text-[10px] sm:text-[11px] text-muted-foreground">(swipe / scroll horizontally to view all 5 stations)</span>
             </div>
             <div className="overflow-x-auto pb-2 -mx-1 px-1">

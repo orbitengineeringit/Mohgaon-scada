@@ -358,10 +358,10 @@ const Index = () => {
                 </div>
               </div>
 
-              {/* Card 4: Live Telemetry */}
+              {/* Card 4: Live Sensors */}
               <div className="p-4 rounded-2xl bg-slate-50/50 dark:bg-slate-900/30 border border-slate-200/50 dark:border-slate-800/50 flex flex-col justify-between min-h-[96px] shadow-sm">
                 <div className="flex items-center justify-between">
-                  <span className="text-[9px] font-extrabold text-muted-foreground uppercase tracking-wider">Telemetry Sensors</span>
+                  <span className="text-[9px] font-extrabold text-muted-foreground uppercase tracking-wider">Sensors</span>
                   <div className="flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                     <span className="text-[9px] font-extrabold text-emerald-500">ACTIVE</span>

@@ -38,12 +38,12 @@ type ParsedMessage = {
 };
 
 const DEFAULT_TOPICS = {
-  INTAKE: "Orbit/BICHIYA/INTAKE/0000000001",
-  WTP: "Orbit/BICHIYA/WTP/0000000001",
-  OHT1: "Orbit/BICHIYA/OHT01/0000000001",
-  OHT2: "Orbit/BICHIYA/OHT02/0000000001",
-  OHT3: "Orbit/BICHIYA/OHT03/0000000001",
-  OHT4: "Orbit/BICHIYA/OHT04/0000000001",
+  INTAKE: "OES/M7g4/Nk3a/8672x4Af",
+  WTP: "OES/M7g4/Tr8p/8672x4Af",
+  OHT1: "OES/M7g4/Ov1h/8672x4Af",
+  OHT2: "OES/M7g4/Ov2h/8672x4Af",
+  OHT3: "OES/M7g4/Ov3h/8672x4Af",
+  OHT4: "OES/M7g4/Ov4h/8672x4Af",
 };
 
 const ohtSensors = (n: number): Sensor[] => {
@@ -124,34 +124,73 @@ function parsePayload(payload: string): Record<string, string | number>[] {
   try {
     const parsed = JSON.parse(payload);
     if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      // Handle params.r_data or direct r_data array
+      const rData = (parsed as any).params?.r_data || (parsed as any).r_data;
+      if (Array.isArray(rData)) {
+        rData.forEach((item: any) => {
+          if (item && typeof item === "object") {
+            const keyName = item.name ?? item.tag ?? item.key;
+            const val = item.value ?? item.val;
+            if (keyName !== undefined && val !== undefined) {
+              results.push({ [String(keyName)]: val });
+            }
+          }
+        });
+        if (results.length > 0) return results;
+      }
+
+      // Handle legacy single TAG / VALUE pair format
       const keys = Object.keys(parsed);
       const tagKey = keys.find(k => k.toUpperCase() === "TAG");
       const valKey = keys.find(k => k.toUpperCase() === "VALUE");
       if (tagKey && valKey && keys.length <= 3) {
-        results.push({ [String(parsed[tagKey])]: parsed[valKey] });
+        results.push({ [String((parsed as any)[tagKey])]: (parsed as any)[valKey] });
         return results;
       }
+
+      // Handle direct key-value object map
       Object.entries(parsed).forEach(([key, value]) => {
-        results.push({ [key]: typeof value === "object" && value !== null && "value" in value ? (value as any).value : value as any });
+        if (key === "params" || key === "r_data") return;
+        results.push({
+          [key]: typeof value === "object" && value !== null && "value" in value ? (value as any).value : value as any
+        });
       });
     } else if (Array.isArray(parsed)) {
-      parsed.forEach(item => item?.name && item.value !== undefined ? results.push({ [item.name]: item.value }) : results.push(item));
+      parsed.forEach((item: any) => {
+        if (item && typeof item === "object") {
+          const keyName = item.name ?? item.tag ?? item.key;
+          const val = item.value ?? item.val;
+          if (keyName !== undefined && val !== undefined) {
+            results.push({ [String(keyName)]: val });
+          } else {
+            results.push(item);
+          }
+        } else {
+          results.push(item);
+        }
+      });
     }
   } catch {
     const matches = payload.match(/\{[^}]+\}/g);
-    matches?.forEach(match => { try { results.push(JSON.parse(match)); } catch { /* ignore */ } });
+    matches?.forEach(match => {
+      try {
+        results.push(JSON.parse(match));
+      } catch {
+        /* ignore */
+      }
+    });
   }
   return results;
 }
 
 function topicSetup(cfg: MqttConfig | null) {
   const topics = {
-    INTAKE: cfg?.intake_topic || DEFAULT_TOPICS.INTAKE,
-    WTP: cfg?.wtp_topic || DEFAULT_TOPICS.WTP,
-    OHT1: cfg?.oht_topic || DEFAULT_TOPICS.OHT1,
-    OHT2: cfg?.oht_topic_2 || DEFAULT_TOPICS.OHT2,
-    OHT3: cfg?.oht_topic_3 || DEFAULT_TOPICS.OHT3,
-    OHT4: cfg?.oht_topic_4 || DEFAULT_TOPICS.OHT4,
+    INTAKE: Deno.env.get("MQTT_TOPIC_INTAKE") || cfg?.intake_topic || DEFAULT_TOPICS.INTAKE,
+    WTP: Deno.env.get("MQTT_TOPIC_WTP") || cfg?.wtp_topic || DEFAULT_TOPICS.WTP,
+    OHT1: Deno.env.get("MQTT_TOPIC_OHT1") || cfg?.oht_topic || DEFAULT_TOPICS.OHT1,
+    OHT2: Deno.env.get("MQTT_TOPIC_OHT2") || cfg?.oht_topic_2 || DEFAULT_TOPICS.OHT2,
+    OHT3: Deno.env.get("MQTT_TOPIC_OHT3") || cfg?.oht_topic_3 || DEFAULT_TOPICS.OHT3,
+    OHT4: Deno.env.get("MQTT_TOPIC_OHT4") || cfg?.oht_topic_4 || DEFAULT_TOPICS.OHT4,
   };
   const topicToSection = new Map<string, { section: Section; subsection?: string }>([
     [topics.INTAKE, { section: "intake" }],
@@ -203,9 +242,6 @@ async function collectSnapshot(cfg: MqttConfig | null): Promise<ParsedMessage[]>
       keepalive: 15,
     });
     let settled = false;
-    // earlyExitTimer: starts a 5s settle window after first message arrives.
-    // This lets other active topics reply without waiting for the full 25s hard timeout,
-    // while still not blocking on devices that are offline.
     let earlyExitTimer: ReturnType<typeof setTimeout> | null = null;
 
     const finish = (err?: Error) => {
@@ -217,7 +253,6 @@ async function collectSnapshot(cfg: MqttConfig | null): Promise<ParsedMessage[]>
       if (err && messages.length === 0) reject(err);
       else resolve(messages);
     };
-    // Hard timeout: 25 seconds — absolute ceiling regardless of device state
     const timer = setTimeout(() => finish(), 25_000);
 
     client.on("connect", () => {
@@ -231,14 +266,10 @@ async function collectSnapshot(cfg: MqttConfig | null): Promise<ParsedMessage[]>
         messages.push({ topic, payload: combined, timestamp: new Date(), ...mapped });
         seenTopics.add(topic);
       }
-      // Exit immediately if all subscribed topics have responded
       if (seenTopics.size >= topics.length) {
         finish();
         return;
       }
-      // After the FIRST message arrives, start a 5-second settling window.
-      // Devices that are online will reply within a few seconds; offline ones won't.
-      // This avoids always waiting the full 25s when some sections are offline.
       if (seenTopics.size === 1 && !earlyExitTimer) {
         earlyExitTimer = setTimeout(() => finish(), 5_000);
       }
@@ -278,7 +309,7 @@ Deno.serve(async (req) => {
       if (msg.section === "unknown") continue;
       const sensors = SENSORS.filter(s => s.section === msg.section && (!s.subsection || s.subsection === msg.subsection) && s.mqttKey);
       for (const [mqttKey, rawValue] of Object.entries(msg.payload)) {
-        const sensor = sensors.find(s => s.mqttKey === mqttKey);
+        const sensor = sensors.find(s => s.mqttKey && s.mqttKey.toUpperCase() === mqttKey.toUpperCase());
         if (!sensor) continue;
         const value = typeof rawValue === "string" ? Number.parseFloat(rawValue) : Number(rawValue);
         if (!Number.isFinite(value) || value > 1e30) continue;
@@ -332,7 +363,6 @@ Deno.serve(async (req) => {
 
     for (const entry of Array.from(byTag.values())) {
       const { sensor, value, topic, at } = entry;
-      // Threshold alarms are checked for analog instruments only
       if (sensor.instrumentType === "pump" || sensor.instrumentType === "totalizer") continue;
 
       const cfg = configs?.find(c => c.tag_id === sensor.id && c.section === sensor.section);
@@ -354,7 +384,6 @@ Deno.serve(async (req) => {
 
       if (alarmType) {
         const thresholdVal = alarmType === "High" ? highThreshold : lowThreshold;
-        // Debounce: check if same alarm was logged recently (within 10 mins)
         const { count, error: countErr } = await supabase
           .from("alarms")
           .select("id", { count: "exact", head: true })

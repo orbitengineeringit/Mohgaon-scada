@@ -17,11 +17,13 @@ interface TagUpdate {
   section: 'oht' | 'intake' | 'wtp';
   topic: string;
   reason?: 'interval' | 'abnormal' | 'alarm' | 'state_change';
+  alignedTimestamp?: string;
 }
 
 const DISCONNECT_TIMEOUT_MS = 3000;
 const ABNORMAL_DELTA_PCT = 0.12;        // 12% of sensor range
 const FLUSH_INTERVAL_MS = 30 * 1000;    // batch-write queue to DB every 30s
+const SNAPSHOT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 const isAbnormalReading = (sensor: MohgaonSensor, value: number): boolean => {
   switch (sensor.instrumentType) {
@@ -57,12 +59,17 @@ export const useMqttTagSync = (
 ) => {
   const pendingLogs = useRef<TagUpdate[]>([]);
   const flushInterval = useRef<NodeJS.Timeout | null>(null);
+  const snapshotInterval = useRef<NodeJS.Timeout | null>(null);
+  const lastSnapshotTime = useRef<number>(0);
   const disconnectCheckInterval = useRef<NodeJS.Timeout | null>(null);
   const { addAlarm } = useAlarm();
   const tagConfigCache = useRef<Map<string, string>>(new Map());
   const lastCacheRefresh = useRef<number>(0);
   const CACHE_TTL = 30000;
   
+  const tagsRef = useRef({ intakeTags, ohtTags, wtpTags });
+  tagsRef.current = { intakeTags, ohtTags, wtpTags };
+
   // Per-tag last-saved tracker for deadband + interval logic
   const lastSaved = useRef<Map<string, { value: number | null; at: number; inAlarm: boolean }>>(new Map());
 
@@ -231,9 +238,43 @@ export const useMqttTagSync = (
     } catch (error) { logError('TagSync.refreshCache', error); }
   }, []);
 
+  const takeSnapshot = useCallback(() => {
+    const now = Date.now();
+    const alignedTs = new Date(Math.floor(now / SNAPSHOT_INTERVAL_MS) * SNAPSHOT_INTERVAL_MS).toISOString();
+    const { intakeTags: currentIntake, ohtTags: currentOht, wtpTags: currentWtp } = tagsRef.current;
+    const allTags = [
+      ...currentIntake.map(t => ({ tag: t, section: 'intake' as const })),
+      ...currentWtp.map(t => ({ tag: t, section: 'wtp' as const })),
+      ...currentOht.map(t => ({ tag: t, section: 'oht' as const })),
+    ];
+    for (const { tag, section } of allTags) {
+      if (tag.status === 'connected' || tag.isActive) {
+        pendingLogs.current.push({
+          tagId: tag.id,
+          value: tag.value,
+          section,
+          topic: tag.mqttTopic || '',
+          reason: 'interval',
+          alignedTimestamp: alignedTs,
+        });
+      }
+    }
+    lastSnapshotTime.current = now;
+  }, []);
+
   const startBatchWriter = useCallback(() => {
     if (flushInterval.current) return () => {};
     refreshTagConfigCache();
+
+    const now = Date.now();
+    if (now - lastSnapshotTime.current >= SNAPSHOT_INTERVAL_MS) {
+      takeSnapshot();
+    }
+
+    snapshotInterval.current = setInterval(() => {
+      takeSnapshot();
+    }, SNAPSHOT_INTERVAL_MS);
+
     flushInterval.current = setInterval(async () => {
       if (pendingLogs.current.length === 0) return;
       if (Date.now() - lastCacheRefresh.current > CACHE_TTL) await refreshTagConfigCache();
@@ -249,7 +290,7 @@ export const useMqttTagSync = (
           .map(log => ({
             tag_config_id: tagConfigCache.current.get(`${log.section}-${log.tagId}`)!,
             tag_id: log.tagId, section: log.section, value: log.value,
-            timestamp: new Date().toISOString(),
+            timestamp: log.alignedTimestamp ?? new Date().toISOString(),
             source: log.reason ? `mqtt:${log.reason}` : 'mqtt',
             mqtt_topic: log.topic,
           }));
@@ -259,8 +300,12 @@ export const useMqttTagSync = (
         }
       } catch (error) { logError('TagSync.batchWrite', error); pendingLogs.current.push(...logsToWrite); }
     }, FLUSH_INTERVAL_MS);
-    return () => { if (flushInterval.current) { clearInterval(flushInterval.current); flushInterval.current = null; } };
-  }, [ensureTagConfigExists, refreshTagConfigCache]);
+
+    return () => {
+      if (flushInterval.current) { clearInterval(flushInterval.current); flushInterval.current = null; }
+      if (snapshotInterval.current) { clearInterval(snapshotInterval.current); snapshotInterval.current = null; }
+    };
+  }, [ensureTagConfigExists, refreshTagConfigCache, takeSnapshot]);
 
   const processMqttMessage = useCallback(async (message: MqttMessage) => {
     const { payload, section, subsection, topic } = message;
@@ -297,11 +342,16 @@ export const useMqttTagSync = (
     tags.forEach(t => latestValues.set(t.id, t.value));
 
     for (const [mqttKey, rawValue] of Object.entries(payload)) {
-      if (!validKeys.includes(mqttKey)) continue;
+      if (!validKeys.includes(mqttKey) && !validKeys.map(k => k.toUpperCase()).includes(mqttKey.toUpperCase())) continue;
 
       const value = typeof rawValue === 'string' ? parseFloat(rawValue) : rawValue;
       
-      const sensor = sensors.find(s => s.mqttKey === mqttKey);
+      const sensor = sensors.find(s => 
+        s.mqttKey === mqttKey ||
+        s.mqttKey.toUpperCase() === mqttKey.toUpperCase() ||
+        (mqttKey.toUpperCase() === 'PT' && (s.mqttKey === 'PT_01' || s.mqttKey === 'PT')) ||
+        (mqttKey.toUpperCase() === 'PT_01' && (s.mqttKey === 'PT_01' || s.mqttKey === 'PT'))
+      );
       if (!sensor) continue;
 
       const sensorId = sensor.id;

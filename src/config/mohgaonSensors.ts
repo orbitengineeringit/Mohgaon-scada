@@ -108,40 +108,27 @@ ALL_SENSORS.filter(s => s.derivedFromPt).forEach(pump => {
 // ==================== MQTT TOPICS ====================
 export const MQTT_TOPIC_KEYS = ['OHT1','OHT2','OHT3','OHT4','INTAKE','WTP'] as const;
 
-// Default topics for Mohgaon plant — overridable from DB config
+// Default topics for Mohgaon plant — dynamically populated at runtime from DB or Vault
 export const DEFAULT_MQTT_TOPICS: Record<string, string> = {
-  INTAKE: 'Orbit/MOHGAON/INTAKE/0000000001',
-  WTP:    'Orbit/MOHGAON/WTP/0000000001',
-  OHT1:   'Orbit/MOHGAON/OHT01/0000000001',
-  OHT2:   'Orbit/MOHGAON/OHT02/0000000001',
-  OHT3:   'Orbit/MOHGAON/OHT03/0000000001',
-  OHT4:   'Orbit/MOHGAON/OHT04/0000000001',
+  INTAKE: '',
+  WTP:    '',
+  OHT1:   '',
+  OHT2:   '',
+  OHT3:   '',
+  OHT4:   '',
 };
 
-// Mutable map — initialized with defaults, may be overridden from DB
+// Mutable map — initialized empty, populated dynamically from DB/Vault
 export const MQTT_TOPICS: Record<string, string> = { ...DEFAULT_MQTT_TOPICS };
 
-// Built dynamically when topics are loaded from DB
-export const TOPIC_TO_SECTION: Record<string, { section: SectionType; subsection?: string }> = {
-  'Orbit/MOHGAON/INTAKE/0000000001': { section: 'intake' },
-  'Orbit/MOHGAON/WTP/0000000001': { section: 'wtp' },
-  'Orbit/MOHGAON/OHT01/0000000001': { section: 'oht', subsection: 'OHT-1' },
-  'Orbit/MOHGAON/OHT02/0000000001': { section: 'oht', subsection: 'OHT-2' },
-  'Orbit/MOHGAON/OHT03/0000000001': { section: 'oht', subsection: 'OHT-3' },
-  'Orbit/MOHGAON/OHT04/0000000001': { section: 'oht', subsection: 'OHT-4' },
-};
+// Built dynamically when topics are loaded from DB or Vault
+export const TOPIC_TO_SECTION: Record<string, { section: SectionType; subsection?: string }> = {};
 
-export const ALL_MQTT_TOPICS: string[] = [
-  'Orbit/MOHGAON/INTAKE/0000000001',
-  'Orbit/MOHGAON/WTP/0000000001',
-  'Orbit/MOHGAON/OHT01/0000000001',
-  'Orbit/MOHGAON/OHT02/0000000001',
-  'Orbit/MOHGAON/OHT03/0000000001',
-  'Orbit/MOHGAON/OHT04/0000000001',
-];
+export const ALL_MQTT_TOPICS: string[] = [];
 
-/** Called by MqttContext after loading topics from database */
+/** Called by MqttContext after loading topics from database or Vault */
 export const setTopicsFromDb = (topics: Record<string, string>) => {
+  if (!topics) return;
   for (const [key, val] of Object.entries(topics)) {
     if (val) MQTT_TOPICS[key] = val;
   }
@@ -188,6 +175,6 @@ export const getPumpSensors = (section: SectionType): MohgaonSensor[] => {
 };
 
 // Valid MQTT keys per section (only keys that actually come from MQTT)
-export const VALID_OHT_KEYS = ['PT', 'PT_01', 'LEVEL', 'FLOW', 'FLOW_IN', 'FLOW_OUT', 'FCV', 'TOTALIZER'];
-export const VALID_INTAKE_KEYS = ['PT_01', 'PT_02', 'PT_03', 'PT_COM', 'LEVEL', 'FLOW', 'TOTALIZER', 'KW'];
-export const VALID_WTP_KEYS = ['CWR_LEVEL', 'BW_LEVEL', 'PT_01', 'PT_02', 'PT_03', 'CWR_PT_04', 'CWR_PT_05', 'CWR_PT_06', 'FLOW', 'FLOW_IN', 'FLOW_OUT', 'PH', 'CL', 'TR', 'RAW_PH', 'RAW_TR', 'CW_PH', 'CW_CL', 'CW_TR', 'TOTALIZER', 'KW'];
+export const VALID_OHT_KEYS = ['PT', 'PT_01', 'LEVEL', 'Level', 'FLOW', 'Flow', 'FLOW_IN', 'FLOW_OUT', 'FCV', 'TOTALIZER'];
+export const VALID_INTAKE_KEYS = ['PT', 'PT_01', 'PT_02', 'PT_03', 'PT_COM', 'LEVEL', 'Level', 'FLOW', 'Flow', 'TOTALIZER', 'KW'];
+export const VALID_WTP_KEYS = ['CWR_LEVEL', 'BW_LEVEL', 'PT', 'PT_01', 'PT_02', 'PT_03', 'CWR_PT_04', 'CWR_PT_05', 'CWR_PT_06', 'FLOW', 'Flow', 'FLOW_IN', 'FLOW_OUT', 'PH', 'CL', 'TR', 'RAW_PH', 'RAW_TR', 'CW_PH', 'CW_CL', 'CW_TR', 'TOTALIZER', 'KW'];

@@ -71,17 +71,22 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
       try {
         const { data } = await supabase.from('mqtt_config').select('*').limit(1).maybeSingle();
 
-        // Fetch MQTT credentials securely from Edge Function (never stored in frontend)
+        // Fetch MQTT credentials & topics securely from Edge Function (never stored in frontend)
         let mqttUsername: string | undefined = undefined;
         let mqttPassword: string | undefined = undefined;
+        let vaultTopics: Record<string, string> | undefined = undefined;
         try {
           const { data: session } = await supabase.auth.getSession();
           if (session?.session?.access_token) {
             const { data: creds, error: credErr } = await supabase.functions.invoke('get-mqtt-credentials');
-            if (!credErr && creds?.username) {
-              mqttUsername = creds.username;
-              mqttPassword = creds.password;
-              logInfo('MqttContext', 'MQTT credentials loaded from Vault');
+            if (!credErr && creds) {
+              if (creds.username) mqttUsername = creds.username;
+              if (creds.password) mqttPassword = creds.password;
+              if (creds.topics && typeof creds.topics === 'object') {
+                vaultTopics = creds.topics;
+                setTopicsFromDb(creds.topics);
+              }
+              logInfo('MqttContext', 'MQTT credentials & topics loaded from Vault');
             } else {
               logWarn('MqttContext', 'Could not load MQTT credentials from Vault — broker may require manual entry');
             }
@@ -97,6 +102,18 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
             brokerUrl = brokerUrl.replace('ws://', 'wss://');
             if (brokerUrl.includes('broker.hivemq.com:8000')) brokerUrl = brokerUrl.replace(':8000', ':8884');
           }
+          const dbTopics = {
+            OHT1: data.oht_topic || '',
+            OHT2: (data as any).oht_topic_2 || '',
+            OHT3: (data as any).oht_topic_3 || '',
+            OHT4: (data as any).oht_topic_4 || '',
+            INTAKE: data.intake_topic || '',
+            WTP: (data as any).wtp_topic || '',
+          };
+          const mergedTopics = {
+            ...dbTopics,
+            ...(vaultTopics || {}),
+          };
           setConfig({
             id: data.id,
             brokerUrl,
@@ -104,28 +121,20 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
             password: mqttPassword,
             clientId: data.client_id || undefined,
             autoConnect: data.auto_connect,
-            topics: {
-              OHT1: data.oht_topic,
-              OHT2: (data as any).oht_topic_2 || '',
-              OHT3: (data as any).oht_topic_3 || '',
-              OHT4: (data as any).oht_topic_4 || '',
-              INTAKE: data.intake_topic,
-              WTP: (data as any).wtp_topic || '',
-            },
+            topics: mergedTopics,
           });
-          setTopicsFromDb({
-            OHT1: data.oht_topic,
-            OHT2: (data as any).oht_topic_2 || '',
-            OHT3: (data as any).oht_topic_3 || '',
-            OHT4: (data as any).oht_topic_4 || '',
-            INTAKE: data.intake_topic,
-            WTP: (data as any).wtp_topic || '',
-          });
+          setTopicsFromDb(mergedTopics);
           if (data.auto_connect) connectRef.current?.();
         } else {
-          // No DB config — still apply credentials if loaded
-          if (mqttUsername) {
-            setConfig(prev => ({ ...prev, username: mqttUsername, password: mqttPassword }));
+          // No DB config — still apply credentials and topics if loaded
+          if (vaultTopics || mqttUsername) {
+            setConfig(prev => ({
+              ...prev,
+              username: mqttUsername,
+              password: mqttPassword,
+              topics: vaultTopics || prev.topics,
+            }));
+            if (vaultTopics) setTopicsFromDb(vaultTopics);
           }
           connectRef.current?.();
         }
@@ -151,6 +160,18 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
     try {
       const parsed = JSON.parse(payload);
       if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+        // Handle params.r_data format (e.g. { params: { r_data: [ { name: "PT_01", value: "10" } ] } })
+        const rData = parsed.params?.r_data || parsed.r_data;
+        if (Array.isArray(rData)) {
+          rData.forEach((item: any) => {
+            if (item && item.name !== undefined && item.value !== undefined) {
+              const val = typeof item.value === 'number' ? item.value : (isNaN(Number(item.value)) || item.value === '' || item.value === null ? item.value : Number(item.value));
+              results.push({ [item.name]: val });
+            }
+          });
+          return results;
+        }
+
         // Handle {TAG: "NAME", VALUE: x} shape (Mohgaon broker format)
         const keys = Object.keys(parsed);
         const hasTag = keys.some(k => k.toUpperCase() === 'TAG');
@@ -160,20 +181,30 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
           const valKey = keys.find(k => k.toUpperCase() === 'VALUE')!;
           const tagName = String(parsed[tagKey]);
           const val = parsed[valKey];
-          results.push({ [tagName]: typeof val === 'object' && val !== null && 'value' in val ? (val as any).value : val });
+          const rawVal = typeof val === 'object' && val !== null && 'value' in val ? (val as any).value : val;
+          const parsedVal = typeof rawVal === 'number' ? rawVal : (isNaN(Number(rawVal)) || rawVal === '' || rawVal === null ? rawVal : Number(rawVal));
+          results.push({ [tagName]: parsedVal });
           return results;
         }
         Object.entries(parsed).forEach(([key, value]) => {
+          if (key === 'params') return;
           if (typeof value === 'object' && value !== null && 'value' in value) {
-            results.push({ [key]: (value as { value: number | string }).value });
+            const val = (value as { value: number | string }).value;
+            const parsedVal = typeof val === 'number' ? val : (isNaN(Number(val)) || val === '' || val === null ? val : Number(val));
+            results.push({ [key]: parsedVal });
           } else {
-            results.push({ [key]: value as string | number });
+            const parsedVal = typeof value === 'number' ? value : (isNaN(Number(value)) || value === '' || value === null ? value as string : Number(value));
+            results.push({ [key]: parsedVal });
           }
         });
       } else if (Array.isArray(parsed)) {
         parsed.forEach(item => {
-          if (item.name && item.value !== undefined) results.push({ [item.name]: item.value });
-          else results.push(item);
+          if (item && item.name !== undefined && item.value !== undefined) {
+            const val = typeof item.value === 'number' ? item.value : (isNaN(Number(item.value)) || item.value === '' || item.value === null ? item.value : Number(item.value));
+            results.push({ [item.name]: val });
+          } else {
+            results.push(item);
+          }
         });
       }
     } catch {

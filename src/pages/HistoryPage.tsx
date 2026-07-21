@@ -346,7 +346,16 @@ const HistoryPage: React.FC = () => {
       if (dataResult.error) throw dataResult.error;
 
       setTotalCount(countResult.count || 0);
-      setLogs(dataResult.data as unknown as HistorianLog[]);
+      const sorted = [...(dataResult.data as unknown as HistorianLog[])].sort((a, b) => {
+        const ta = Math.floor(new Date(a.timestamp).getTime() / 60000);
+        const tb = Math.floor(new Date(b.timestamp).getTime() / 60000);
+        if (ta !== tb) return tb - ta;
+        const oa = getSectionOrder(a.section, a.tag_id);
+        const ob = getSectionOrder(b.section, b.tag_id);
+        if (oa !== ob) return oa - ob;
+        return a.tag_id.localeCompare(b.tag_id);
+      });
+      setLogs(sorted);
       setCurrentPage(page);
       if (page === 1) toast({ title: 'Data Loaded', description: `Found ${countResult.count || 0} total records.` });
     } catch (error: any) {
@@ -453,10 +462,11 @@ const HistoryPage: React.FC = () => {
       }
 
       // Phase 3b: timestamp-first grouping — latest time on top, and within each
-      // timestamp bucket (rounded to the minute) order by Intake → WTP → OHT-1/2/3 → tag.
+      // 5-minute timestamp bucket order by Intake → WTP → OHT-1/2/3 → tag.
       processed.sort((a, b) => {
-        const ta = Math.floor(new Date(a.timestamp).getTime() / 60000);
-        const tb = Math.floor(new Date(b.timestamp).getTime() / 60000);
+        const BUCKET_MS = 5 * 60 * 1000;
+        const ta = Math.floor(new Date(a.timestamp).getTime() / BUCKET_MS);
+        const tb = Math.floor(new Date(b.timestamp).getTime() / BUCKET_MS);
         if (ta !== tb) return tb - ta;
         const oa = getSectionOrder(a.section, a.tag_id);
         const ob = getSectionOrder(b.section, b.tag_id);

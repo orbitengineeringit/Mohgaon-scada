@@ -59,7 +59,14 @@ const getDisplaySection = (section: string, tagId: string): string => {
   const sec = section.toLowerCase();
   if (sec === 'oht') {
     const m = tagId.match(/^OHT[-_\s]*([0-9]+)/i);
-    if (m) return `OHT-${m[1]}`;
+    if (m) {
+      const num = m[1];
+      if (num === '1') return 'OHT - 1 Ward No 04 - 300KL';
+      if (num === '2') return 'OHT - 2 Ward No 06 500KL';
+      if (num === '3') return 'OHT - 3 Ward No 06 200KL';
+      if (num === '4') return 'OHT - 4 Ward No 10 200KL';
+      return `OHT-${num}`;
+    }
     return 'OHT';
   }
   return section.toUpperCase();

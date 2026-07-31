@@ -29,10 +29,10 @@ const VENDOR_KEY = 'UADDORESREG022';
 const DEVICES = [
   { key: 'intake', id: 'MOH_INTK_001', label: 'INTAKE WELL' },
   { key: 'wtp', id: 'MOH_WTP_001', label: 'WATER TREATMENT PLANT (WTP)' },
-  { key: 'oht1', id: 'MOH_OHT_001', label: 'OHT-1' },
-  { key: 'oht2', id: 'MOH_OHT_002', label: 'OHT-2' },
-  { key: 'oht3', id: 'MOH_OHT_003', label: 'OHT-3' },
-  { key: 'oht4', id: 'MOH_OHT_004', label: 'OHT-4' },
+  { key: 'oht1', id: 'MOH_OHT_001', label: 'OHT - 1 Ward No 04 - 300KL' },
+  { key: 'oht2', id: 'MOH_OHT_002', label: 'OHT - 2 Ward No 06 500KL' },
+  { key: 'oht3', id: 'MOH_OHT_003', label: 'OHT - 3 Ward No 06 200KL' },
+  { key: 'oht4', id: 'MOH_OHT_004', label: 'OHT - 4 Ward No 10 200KL' },
 ] as const;
 
 const GisSyncStatus = () => {

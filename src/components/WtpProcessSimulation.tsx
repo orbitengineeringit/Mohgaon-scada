@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { useScada } from '@/contexts/ScadaContext';
 import SensorStatusStrip from './SensorStatusStrip';
-import { useTagConnection } from '@/hooks/useTagConnection';
+
 
 /**
  * WTP Process Simulation – Realistic Water Treatment Plant Mimic
@@ -548,9 +548,9 @@ const WtpProcessSimulation: React.FC = () => {
   const clOutVal = findTag('WTP-CL')?.value ?? 0;
   const taOutVal = findTag('WTP-TA')?.value ?? 0;
   const totVal = findTag('WTP-Totalizer')?.value ?? 0;
-  const kwTag = findTag('WTP-KW');
-  const kwVal = kwTag?.value ?? 0;
-  const kwConnection = useTagConnection(kwTag);
+  const kwTag = undefined; // WTP-KW not installed
+  const kwVal = 0;
+  const kwConnection = 'no-data' as const;
 
   const pt1Val = findTag('WTP-PT1')?.value ?? 0;
   const pt2Val = findTag('WTP-PT2')?.value ?? 0;
@@ -758,8 +758,8 @@ const WtpProcessSimulation: React.FC = () => {
       <SensorStatusStrip
         tags={wtpTags}
         sensorIds={[
-          'WTP-Flow-IN','WTP-Flow-OUT','WTP-LT-BW','WTP-LT-CW','WTP-PH','WTP-CL','WTP-TA',
-          'WTP-Totalizer','WTP-KW','WTP-PT1','WTP-PT2','WTP-CombinedPT1','WTP-PT5'
+          'WTP-Flow-IN','WTP-Flow-OUT','WTP-LT-BW','WTP-LT-CW','WTP-PH-IN','WTP-TA-IN','WTP-PH','WTP-CL','WTP-TA',
+          'WTP-Totalizer','WTP-PT1','WTP-PT2','WTP-CombinedPT1','WTP-PT5'
         ]}
       />
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
@@ -852,6 +852,27 @@ const WtpProcessSimulation: React.FC = () => {
                 <text x={efmInX} y={inletPipeY + 58} textAnchor="middle" fontSize="20" fontWeight="900" fill="hsl(var(--foreground))" fontFamily="ui-monospace">
                   {flowInVal.toFixed(1)} <tspan fontSize="11" fill="hsl(var(--muted-foreground))" fontWeight="600">m³/h</tspan>
                 </text>
+              </g>
+            );
+          })()}
+
+          {/* ─── INLET ANALYZERS: pH & Turbidity right of EFM IN ─── */}
+          {(() => {
+            const phInVal = findTag('WTP-PH-IN')?.value ?? 0;
+            const taInVal = findTag('WTP-TA-IN')?.value ?? 0;
+            // Position: right of EFM IN along inlet pipe
+            const analyzerBaseX = efmInX + 115;
+            const analyzerY = inletPipeY - 155;
+            const aW = 100, aH = 130;
+            return (
+              <g>
+                {/* pH Inlet Analyzer */}
+                <InlinePhAnalyzer x={analyzerBaseX} y={analyzerY} w={aW} h={aH} value={phInVal} label="pH INLET" />
+                {/* Turbidity Inlet Analyzer */}
+                <InlineTaAnalyzer x={analyzerBaseX + aW + 15} y={analyzerY} w={aW} h={aH} value={taInVal} label="TURB.INLET" />
+                {/* Pipe connection nubs */}
+                <rect x={analyzerBaseX + 48} y={inletPipeY - pipeW / 2 - 3} width={6} height={pipeW / 2 + 3} rx={1} fill={pDark} />
+                <rect x={analyzerBaseX + aW + 15 + 48} y={inletPipeY - pipeW / 2 - 3} width={6} height={pipeW / 2 + 3} rx={1} fill={pDark} />
               </g>
             );
           })()}
@@ -1509,77 +1530,7 @@ const WtpProcessSimulation: React.FC = () => {
           })()}
         </g>
 
-        {/* ═══ ENERGY METER (MFM) ═══ */}
-        <g>
-          {(() => {
-            const ex = energyMeterX, ey = energyMeterY;
-            return (
-              <g>
-                <text x={ex + 5} y={ey - 10} textAnchor="middle" fontSize="13" fontWeight="800" fill="hsl(var(--foreground))">MFM (Energy Meter)</text>
-                <svg x={ex - 55} y={ey} width={120} height={140} viewBox="0 0 90 110" style={{ filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.2))' }}>
-                  <rect x="5" y="2" width="80" height="106" rx="5" fill="hsl(var(--secondary))" stroke="hsl(var(--border))" strokeWidth="1.5" />
-                  <rect x="10" y="7" width="70" height="96" rx="3" fill="hsl(var(--card))" stroke="hsl(var(--border))" strokeWidth="1" />
-                  {[[12, 9], [72, 9], [12, 97], [72, 97]].map(([cx, cy], i) => (
-                    <circle key={i} cx={cx} cy={cy} r="3" fill="hsl(var(--muted))" stroke="hsl(var(--border))" strokeWidth="0.5" />
-                  ))}
-                  <rect x="16" y="16" width="58" height="24" rx="2" fill="hsl(var(--secondary))" stroke="hsl(var(--border))" strokeWidth="0.8" />
-                  <rect x="18" y="18" width="54" height="20" rx="1" fill="hsl(142 71% 45% / 0.1)" />
-                  <text x="45" y="32" textAnchor="middle" fill="hsl(var(--foreground))" style={{ fontSize: '13px', fontFamily: 'ui-monospace, monospace', fontWeight: 700 }}>{kwVal.toFixed(1)}</text>
-                  <text x="45" y="23" textAnchor="middle" fill="hsl(var(--muted-foreground))" style={{ fontSize: '6px', fontFamily: 'ui-monospace, monospace', fontWeight: 600 }}>kW</text>
-                  {[24, 33, 42, 51, 60].map((xx, i) => (
-                    <circle key={`l${i}`} cx={xx} cy="48" r="2.5" fill="hsl(var(--muted))" />
-                  ))}
-                  <circle cx="30" cy="56" r="2" fill="hsl(var(--destructive) / 0.6)" />
-                  <circle cx="38" cy="56" r="2" fill="hsl(var(--warning) / 0.6)" />
-                  <circle cx="46" cy="56" r="2" fill="#22c55e" filter="drop-shadow(0 0 2px #22c55e)" />
-                  <circle cx="62" cy="56" r="6" fill="hsl(var(--muted))" stroke="hsl(var(--border))" strokeWidth="0.8" />
-                  <circle cx="62" cy="56" r="2" fill="hsl(var(--muted-foreground))" />
-                  <rect x="18" y="68" width="54" height="5" rx="2" fill="hsl(var(--secondary))" stroke="hsl(var(--border))" strokeWidth="0.5" />
-                  <rect x="14" y="80" width="62" height="18" rx="2" fill="hsl(var(--muted))" stroke="hsl(var(--border))" strokeWidth="0.8" opacity="0.6" />
-                  {[26, 38, 50, 62].map((xx, i) => (
-                    <g key={`ts${i}`}>
-                      <rect x={xx - 4} y={82} width="8" height="10" rx="1" fill="hsl(var(--muted-foreground) / 0.3)" stroke="hsl(var(--border))" strokeWidth="0.4" />
-                      <circle cx={xx} cy={87} r="2" fill="hsl(var(--muted-foreground) / 0.4)" />
-                    </g>
-                  ))}
-                </svg>
-                <g transform={`translate(${ex + 5}, ${ey + 144})`}>
-                  {(() => {
-                    let fill = 'hsl(var(--destructive) / 0.15)';
-                    let stroke = 'hsl(var(--destructive))';
-                    let text = 'OFF';
-                    let pulseDur = '0.8s';
-                    let isPulse = true;
-                    
-                    if (kwConnection === 'connected') {
-                      fill = 'hsl(var(--success) / 0.15)';
-                      stroke = 'hsl(var(--success))';
-                      text = 'ON';
-                      pulseDur = '1.6s';
-                    } else if (kwConnection === 'inactive') {
-                      fill = 'rgba(56, 189, 248, 0.15)';
-                      stroke = '#38bdf8';
-                      text = 'ZERO';
-                      isPulse = false;
-                    }
-                    
-                    return (
-                      <>
-                        <rect x={-28} y={0} width={56} height={16} rx={4} fill={fill} stroke={stroke} strokeWidth="0.8" />
-                        <circle cx={-18} cy={8} r={2.5} fill={stroke}>
-                          {isPulse && <animate attributeName="opacity" values="1;0.4;1" dur={pulseDur} repeatCount="indefinite" />}
-                        </circle>
-                        <text x={4} y={12} textAnchor="middle" fontSize="10" fontWeight="800" letterSpacing="1" fill={stroke}>
-                          {text}
-                        </text>
-                      </>
-                    );
-                  })()}
-                </g>
-              </g>
-            );
-          })()}
-        </g>
+        {/* Energy Meter removed — WTP-KW not installed */}
 
         {/* ═══ FLOW DIRECTION ARROWS ═══ */}
         <g opacity="0.5">

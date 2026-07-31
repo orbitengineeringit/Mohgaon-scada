@@ -120,7 +120,6 @@ const WtpPage: React.FC = () => {
   const outletAnalyzerIds = useMemo(() => WTP_SENSORS.filter(s => s.subsection === 'outlet' && !s.notInstalled).map(s => s.id), []);
   const pumpIds = useMemo(() => WTP_SENSORS.filter(s => s.instrumentType === 'pump' && !s.notInstalled).map(s => s.id), []);
   const ptIds = useMemo(() => WTP_SENSORS.filter(s => s.instrumentType === 'pt' && !s.notInstalled).map(s => s.id), []);
-  const kwSensor = WTP_SENSORS.find(s => s.instrumentType === 'kw' && !s.notInstalled);
   const totalizerSensor = WTP_SENSORS.find(s => s.instrumentType === 'totalizer' && !s.notInstalled);
 
   const pumpPtPairs = useMemo(() => {
@@ -146,7 +145,7 @@ const WtpPage: React.FC = () => {
             <div className="w-2 h-2 rounded-full bg-primary pulse-live" />
             Levels, Flow & Metering
           </h3>
-          <SortableCardGrid groupKey="wtp-primary" sensorIds={[...ltIds, ...flowIds, totalizerSensor?.id, kwSensor?.id].filter(Boolean) as string[]} className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6 w-full">
+          <SortableCardGrid groupKey="wtp-primary" sensorIds={[...ltIds, ...flowIds, totalizerSensor?.id].filter(Boolean) as string[]} className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6 w-full">
             {(orderedIds) => orderedIds.map((id) => {
               const sensor = sensorMap[id];
               const tag = findTag(id);
@@ -263,7 +262,7 @@ const WtpPage: React.FC = () => {
     });
 
     return list;
-  }, [ltIds, ptIds, flowIds, inletAnalyzerIds, outletAnalyzerIds, pumpIds, wtpTags, totalizerSensor, kwSensor, sensorMap, pumpPtPairs]);
+  }, [ltIds, ptIds, flowIds, inletAnalyzerIds, outletAnalyzerIds, pumpIds, wtpTags, totalizerSensor, sensorMap, pumpPtPairs]);
 
   return (
     <div className="min-h-screen flex flex-col bg-background grid-pattern">

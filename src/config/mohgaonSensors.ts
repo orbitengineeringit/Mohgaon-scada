@@ -7,7 +7,7 @@
  * OHT (×3): PT, Level, Flow In, Flow Out, Totalizer (computed)
  * Intake: PT1, PT2, CombinedPT, Level, Flow, Totalizer (computed), KW (not installed), Pump1, Pump2 (derived from PT)
  * WTP: PT1-PT4, CombinedPT1, CombinedPT2, LT_BW, LT_CW, Flow_IN, Flow_OUT, Totalizer (computed),
- *       PH_IN, TA_IN, PH, CL, TA, KW (not installed), Pump1-Pump4 (derived from PT)
+ *       PH_IN, TA_IN (Inlet analyzers - installed), PH, CL, TA, KW (not installed), Pump1-Pump4 (derived from PT)
  */
 
 export type SectionType = 'oht' | 'intake' | 'wtp';
@@ -66,7 +66,7 @@ export const INTAKE_SENSORS: MohgaonSensor[] = [
 // ==================== WTP SENSORS ====================
 export const WTP_SENSORS: MohgaonSensor[] = [
   // Levels
-  { id: 'WTP-LT-BW', mqttKey: 'BW_LEVEL', label: 'Level - Backwash', unit: '%', min: 0, max: 100, section: 'wtp', type: 'analog', instrumentType: 'lt', notInstalled: true },
+  { id: 'WTP-LT-BW', mqttKey: 'BW_LEVEL', label: 'Level - Backwash', unit: '%', min: 0, max: 100, section: 'wtp', type: 'analog', instrumentType: 'lt' },
   { id: 'WTP-LT-CW', mqttKey: 'CWR_LEVEL', label: 'Level - Clear Water', unit: '%', min: 0, max: 100, section: 'wtp', type: 'analog', instrumentType: 'lt' },
   // Pressures (2 individual PTs + 1 combined)
   { id: 'WTP-PT1', mqttKey: 'PT_01', label: 'HT Pump 1 PT', unit: 'Bar', min: 0, max: 10, section: 'wtp', type: 'analog', instrumentType: 'pt' },
@@ -79,15 +79,15 @@ export const WTP_SENSORS: MohgaonSensor[] = [
   { id: 'WTP-Flow-IN', mqttKey: 'FLOW', label: 'Flow Meter (Inlet)', unit: 'm³/hr', min: 0, max: 200, section: 'wtp', type: 'analog', instrumentType: 'flow' },
   { id: 'WTP-Flow-OUT', mqttKey: 'FLOW_OUT', label: 'Flow Meter (Outlet)', unit: 'm³/hr', min: 0, max: 200, section: 'wtp', type: 'analog', instrumentType: 'flow', notInstalled: true },
   { id: 'WTP-Totalizer', mqttKey: 'TOTALIZER', label: 'Totalizer', unit: 'm³', min: 0, max: 999999, section: 'wtp', type: 'totalizer', instrumentType: 'totalizer' },
-  // Inlet analyzers (not installed in this WTP)
-  { id: 'WTP-PH-IN', mqttKey: 'RAW_PH', label: 'pH Analyzer (Inlet)', unit: 'pH', min: 0, max: 14, section: 'wtp', subsection: 'inlet', type: 'analog', instrumentType: 'ph', notInstalled: true },
-  { id: 'WTP-TA-IN', mqttKey: 'RAW_TR', label: 'Turbidity (Inlet)', unit: 'NTU', min: 0, max: 100, section: 'wtp', subsection: 'inlet', type: 'analog', instrumentType: 'turbidity', notInstalled: true },
+  // Inlet analyzers (installed)
+  { id: 'WTP-PH-IN', mqttKey: 'RAW_PH', label: 'pH Analyzer (Inlet)', unit: 'pH', min: 0, max: 14, section: 'wtp', subsection: 'inlet', type: 'analog', instrumentType: 'ph' },
+  { id: 'WTP-TA-IN', mqttKey: 'RAW_TR', label: 'Turbidity (Inlet)', unit: 'NTU', min: 0, max: 100, section: 'wtp', subsection: 'inlet', type: 'analog', instrumentType: 'turbidity' },
   // Outlet analyzers
   { id: 'WTP-PH', mqttKey: 'PH', label: 'pH Analyzer (Outlet)', unit: 'pH', min: 0, max: 14, section: 'wtp', subsection: 'outlet', type: 'analog', instrumentType: 'ph' },
   { id: 'WTP-CL', mqttKey: 'CL', label: 'Chlorine (Outlet)', unit: 'mg/L', min: 0, max: 5, section: 'wtp', subsection: 'outlet', type: 'analog', instrumentType: 'chlorine' },
   { id: 'WTP-TA', mqttKey: 'TR', label: 'Turbidity (Outlet)', unit: 'NTU', min: 0, max: 100, section: 'wtp', subsection: 'outlet', type: 'analog', instrumentType: 'turbidity' },
-  // Energy Meter (MFM) - Active
-  { id: 'WTP-KW', mqttKey: 'KW', label: 'Energy Meter (MFM)', unit: 'kW', min: 0, max: 100, section: 'wtp', type: 'analog', instrumentType: 'kw' },
+  // Energy Meter (MFM) - Not Installed
+  { id: 'WTP-KW', mqttKey: 'KW', label: 'Energy Meter (MFM)', unit: 'kW', min: 0, max: 100, section: 'wtp', type: 'analog', instrumentType: 'kw', notInstalled: true },
   // Pumps (derived from PT status — no MQTT key)
   { id: 'WTP-Pump1', mqttKey: '', label: 'HT Pump 1', unit: '', min: 0, max: 1, section: 'wtp', type: 'digital', instrumentType: 'pump', derivedFromPt: 'WTP-PT1' },
   { id: 'WTP-Pump2', mqttKey: '', label: 'HT Pump 2', unit: '', min: 0, max: 1, section: 'wtp', type: 'digital', instrumentType: 'pump', derivedFromPt: 'WTP-PT2' },

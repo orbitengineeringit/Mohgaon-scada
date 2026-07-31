@@ -120,7 +120,6 @@ const IntakePage: React.FC = () => {
   const ptSensors = INTAKE_SENSORS.filter(s => s.instrumentType === 'pt' && !s.notInstalled);
   const ltSensor = INTAKE_SENSORS.find(s => s.instrumentType === 'lt' && !s.notInstalled);
   const flowSensor = INTAKE_SENSORS.find(s => s.instrumentType === 'flow' && !s.notInstalled);
-  const kwSensor = INTAKE_SENSORS.find(s => s.instrumentType === 'kw' && !s.notInstalled);
   const totalizerSensor = INTAKE_SENSORS.find(s => s.instrumentType === 'totalizer' && !s.notInstalled);
   const pumpSensors = INTAKE_SENSORS.filter(s => s.instrumentType === 'pump' && !s.notInstalled);
 
@@ -148,7 +147,7 @@ const IntakePage: React.FC = () => {
   }, []);
 
   const ptIds = useMemo(() => [...ptSensors.map(s => s.id), 'INT-CombinedPT'], []);
-  const midIds = useMemo(() => [ltSensor?.id, flowSensor?.id, kwSensor?.id].filter(Boolean) as string[], []);
+  const midIds = useMemo(() => [ltSensor?.id, flowSensor?.id].filter(Boolean) as string[], []);
   const pumpIds = useMemo(() => pumpSensors.map(s => s.id), []);
 
   let idx = 0;
@@ -160,7 +159,7 @@ const IntakePage: React.FC = () => {
         <div className="mb-8">
           <h3 className="text-lg font-semibold text-foreground mb-4 opacity-0 animate-fade-in flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-primary pulse-live" />
-            Main Process (Level, Flow & Energy)
+            Main Process (Level & Flow)
           </h3>
           <SortableCardGrid groupKey="intake-main" sensorIds={[...midIds, totalizerSensor?.id].filter(Boolean) as string[]} className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6 w-full">
             {(orderedIds) => orderedIds.map((id) => {

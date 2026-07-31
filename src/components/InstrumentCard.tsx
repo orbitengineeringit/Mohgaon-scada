@@ -17,7 +17,8 @@ import WtpPump from './instruments/WtpPump';
 import AlarmSettingsModal, { AlarmSettings } from './AlarmSettingsModal';
 import SensorTrendModal from './SensorTrendModal';
 import { Button } from '@/components/ui/button';
-import { Bell, TrendingUp, Wifi, WifiOff, CircleSlash } from 'lucide-react';
+import { TrendingUp, Wifi, WifiOff, CircleSlash } from 'lucide-react';
+import { AlarmBellButton } from './AlarmBellButton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useTagConnection } from '@/hooks/useTagConnection';
 
@@ -241,18 +242,14 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
                       <TrendingUp className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="top" className="z-[100]"><p>View Trends</p></TooltipContent>
+                  <TooltipContent side="top" className="z-[100]"><p>📈 View Trends</p></TooltipContent>
                 </Tooltip>
-              <Tooltip delayDuration={150}>
-                <TooltipTrigger asChild>
-                  <Button variant={hasAlarmConfig ? "default" : "ghost"} size="icon"
-                    className={`h-5 w-5 sm:h-6 sm:w-6 ${hasAlarmConfig ? 'bg-primary text-primary-foreground' : 'hover:bg-primary/10'}`}
-                    onClick={(e) => { e.stopPropagation(); setShowAlarmSettings(true); }}>
-                    <Bell className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="z-[100]"><p>Alarm Settings</p></TooltipContent>
-              </Tooltip>
+              <AlarmBellButton 
+                hasAlarmConfig={hasAlarmConfig} 
+                onClick={(e) => { e.stopPropagation(); setShowAlarmSettings(true); }} 
+                className="h-5 w-5 sm:h-6 sm:w-6"
+                iconClassName="h-3 w-3"
+              />
             </div>
           </div>
 

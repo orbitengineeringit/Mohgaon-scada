@@ -14,7 +14,8 @@ import AlarmSettingsModal, { AlarmSettings } from '@/components/AlarmSettingsMod
 import { Button } from '@/components/ui/button';
 import WtpProcessSimulation from '@/components/WtpProcessSimulation';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { TrendingUp, Bell, Wifi } from 'lucide-react';
+import { TrendingUp, Wifi } from 'lucide-react';
+import { AlarmBellButton } from '@/components/AlarmBellButton';
 
 /** WTP Combined PT Card */
 const WtpCombinedPtCard: React.FC<{
@@ -64,18 +65,14 @@ const WtpCombinedPtCard: React.FC<{
                   <TrendingUp className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top" className="z-[100]"><p>View Trends</p></TooltipContent>
+              <TooltipContent side="top" className="z-[100]"><p>📈 View Trends</p></TooltipContent>
             </Tooltip>
-            <Tooltip delayDuration={150}>
-              <TooltipTrigger asChild>
-                <Button variant={hasAlarmConfig ? "default" : "ghost"} size="icon"
-                  className={`h-5 w-5 sm:h-6 sm:w-6 ${hasAlarmConfig ? 'bg-primary text-primary-foreground' : 'hover:bg-primary/10'}`}
-                  onClick={(e) => { e.stopPropagation(); setShowAlarm(true); }}>
-                  <Bell className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="z-[100]"><p>Alarm Settings</p></TooltipContent>
-            </Tooltip>
+            <AlarmBellButton 
+              hasAlarmConfig={hasAlarmConfig} 
+              onClick={(e) => { e.stopPropagation(); setShowAlarm(true); }} 
+              className="h-5 w-5 sm:h-6 sm:w-6"
+              iconClassName="h-2.5 w-2.5 sm:h-3 sm:w-3"
+            />
           </div>
         </div>
         <div className="flex-1 flex items-center justify-center py-0.5 sm:py-1 overflow-hidden">

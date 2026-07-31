@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useScada, TagData } from '@/contexts/ScadaContext';
-import { Gauge, Droplets, Activity, Bell, Wifi, WifiOff, TrendingUp, CircleSlash } from 'lucide-react';
+import { Gauge, Droplets, Activity, Wifi, WifiOff, TrendingUp, CircleSlash } from 'lucide-react';
+import { AlarmBellButton } from './AlarmBellButton';
 import AlarmSettingsModal, { AlarmSettings } from './AlarmSettingsModal';
 import SensorTrendModal from './SensorTrendModal';
 import { Button } from '@/components/ui/button';
@@ -145,31 +146,10 @@ const OhtSensorCard: React.FC<OhtSensorCardProps> = ({ tag, index }) => {
               </Tooltip>
 
               {/* Alarm Settings Button */}
-              <Tooltip delayDuration={150}>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant={hasAlarmConfig ? "default" : "outline"}
-                    size="icon"
-                    className={`
-                      h-8 w-8 transition-all duration-200
-                      focus-visible:ring-2 focus-visible:ring-primary/30
-                      ${hasAlarmConfig 
-                        ? 'bg-primary hover:bg-primary/90 text-primary-foreground hover:shadow-[0_0_12px_hsl(var(--primary)/0.4)]' 
-                        : 'bg-card hover:bg-secondary border border-border hover:border-primary/50 text-muted-foreground hover:text-primary hover:shadow-[0_0_8px_hsl(var(--primary)/0.2)]'
-                      }
-                    `}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowAlarmSettings(true);
-                    }}
-                  >
-                    <Bell className={`h-4 w-4 ${hasAlarmConfig ? 'animate-pulse' : ''}`} />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="bg-popover text-popover-foreground border border-border shadow-lg z-50">
-                  <p className="font-medium">{hasAlarmConfig ? '⚙️ Edit Alarm Settings' : '🔔 Configure Alarms'}</p>
-                </TooltipContent>
-              </Tooltip>
+                <AlarmBellButton 
+                  hasAlarmConfig={hasAlarmConfig} 
+                  onClick={(e) => { e.stopPropagation(); setShowAlarmSettings(true); }} 
+                />
               
               {/* Status Icon */}
               <div className={`p-2 rounded-lg bg-${statusColor}/10`}>

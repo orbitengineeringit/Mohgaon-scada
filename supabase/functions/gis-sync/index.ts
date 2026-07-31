@@ -192,11 +192,12 @@ Deno.serve(async (req) => {
       ],
     };
 
-    // 4) POST to government endpoint
+    // 4) POST to government endpoint (with 15s timeout to prevent cron crash)
     const resp = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(requestPayload),
+      signal: AbortSignal.timeout(15_000),
     });
     responseStatus = resp.status;
     responseBody = await resp.text();

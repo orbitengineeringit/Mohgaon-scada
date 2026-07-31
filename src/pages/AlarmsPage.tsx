@@ -200,7 +200,7 @@ const AlarmsPage: React.FC = () => {
                         ) : (
                             <div className="rounded-lg border border-border overflow-hidden">
                                 <div className="max-h-[600px] overflow-auto">
-                                    <Table>
+                                    <Table className="min-w-[720px]">
                                         <TableHeader className="sticky top-0 bg-card">
                                             <TableRow>
                                                 <TableHead className="w-[180px]">Time</TableHead>

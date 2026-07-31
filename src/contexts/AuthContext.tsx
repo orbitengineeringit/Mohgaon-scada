@@ -32,19 +32,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       let remaining = AUTO_LOGOUT_MS;
 
       if (loginTime) {
-        const elapsed = Date.now() - parseInt(loginTime, 10);
-        if (elapsed >= AUTO_LOGOUT_MS) {
-          logout();
-          return;
+        const parsedTime = parseInt(loginTime, 10);
+        if (!Number.isFinite(parsedTime)) {
+          // Corrupted timestamp — reset it to prevent infinite logout loop
+          localStorage.setItem('loginTimestamp', Date.now().toString());
+        } else {
+          const elapsed = Date.now() - parsedTime;
+          if (elapsed >= AUTO_LOGOUT_MS) {
+            logout().catch(() => {});
+            return;
+          }
+          remaining = AUTO_LOGOUT_MS - elapsed;
         }
-        remaining = AUTO_LOGOUT_MS - elapsed;
       } else {
         localStorage.setItem('loginTimestamp', Date.now().toString());
       }
 
       if (logoutTimer) clearTimeout(logoutTimer);
       logoutTimer = setTimeout(() => {
-        logout();
+        logout().catch(() => {});
       }, remaining);
     };
 
@@ -61,15 +67,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      const isAuth = !!session?.user;
-      setIsAuthenticated(isAuth);
-      setLoading(false);
-      
-      if (isAuth) {
-        setupLogoutTimer();
-      }
-    });
+    // Note: onAuthStateChange already emits initial session event in Supabase JS v2.
+    // Removed redundant getSession() call that caused duplicate timer initialization.
 
     return () => {
       subscription.unsubscribe();

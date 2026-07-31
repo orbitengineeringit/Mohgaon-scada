@@ -157,8 +157,8 @@ export const ScadaProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             return {
               ...tag,
               dbId: config?.id,
-              highSetpoint: config?.high_setpoint ? Number(config.high_setpoint) : undefined,
-              lowSetpoint: config?.low_setpoint ? Number(config.low_setpoint) : undefined,
+              highSetpoint: config?.high_setpoint != null ? Number(config.high_setpoint) : undefined,
+              lowSetpoint: config?.low_setpoint != null ? Number(config.low_setpoint) : undefined,
               alarmEmails: [],
               alarmEnabled: config?.alarm_enabled ?? false,
             };
@@ -191,21 +191,31 @@ export const ScadaProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const updateTagSetpoints = useCallback(async (section: 'intake' | 'oht' | 'wtp', tagId: string, high?: number, low?: number) => {
     const setter = section === 'intake' ? setIntakeTags : section === 'wtp' ? setWtpTags : setOhtTags;
-    const tags = section === 'intake' ? intakeTags : section === 'wtp' ? wtpTags : ohtTags;
-    const tag = tags.find(t => t.id === tagId);
-    if (!tag) return;
-    if (tag.dbId) {
-      await supabase.from('tag_config').update({ high_setpoint: high || null, low_setpoint: low || null }).eq('id', tag.dbId);
-    }
-    setter(prev => prev.map(t => t.id === tagId ? { ...t, highSetpoint: high, lowSetpoint: low } : t));
-  }, [intakeTags, ohtTags, wtpTags]);
+    setter(prev => {
+      const tag = prev.find(t => t.id === tagId);
+      if (tag?.dbId) {
+        supabase.from('tag_config').update({ high_setpoint: high ?? null, low_setpoint: low ?? null }).eq('id', tag.dbId).then(() => {}, (err) => logError('ScadaContext.updateSetpoints', err));
+      }
+      return prev.map(t => t.id === tagId ? { ...t, highSetpoint: high, lowSetpoint: low } : t);
+    });
+  }, []);
 
   const updateTagAlarmSettings = useCallback(async (section: 'intake' | 'oht' | 'wtp', tagId: string, settings: AlarmSettings) => {
     const setter = section === 'intake' ? setIntakeTags : section === 'wtp' ? setWtpTags : setOhtTags;
-    setter(prev => prev.map(t =>
-      t.id === tagId ? { ...t, highSetpoint: settings.highSetpoint, lowSetpoint: settings.lowSetpoint,
-        alarmEnabled: settings.alarmEnabled, alarmEmails: settings.alarmEmails } : t
-    ));
+    setter(prev => {
+      const tag = prev.find(t => t.id === tagId);
+      if (tag?.dbId) {
+        supabase.from('tag_config').update({
+          high_setpoint: settings.highSetpoint ?? null,
+          low_setpoint: settings.lowSetpoint ?? null,
+          alarm_enabled: settings.alarmEnabled,
+        }).eq('id', tag.dbId).then(() => {}, (err) => logError('ScadaContext.updateAlarmSettings', err));
+      }
+      return prev.map(t =>
+        t.id === tagId ? { ...t, highSetpoint: settings.highSetpoint, lowSetpoint: settings.lowSetpoint,
+          alarmEnabled: settings.alarmEnabled, alarmEmails: settings.alarmEmails } : t
+      );
+    });
   }, []);
 
   const getActiveTagCount = useCallback(() => {

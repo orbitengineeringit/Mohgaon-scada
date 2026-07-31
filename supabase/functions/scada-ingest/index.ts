@@ -357,15 +357,24 @@ Deno.serve(async (req) => {
       : { error: null } as any;
     if (insertErr) throw new Error(`historian insert failed: ${insertErr.message}`);
 
-    // Backend Alarm Detection & Debounce
-    const alarmsToInsert = [];
+    // Backend Alarm Detection & Debounce (bulk query)
+    const alarmsToInsert: any[] = [];
     const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+
+    // Single bulk query: fetch all recent alarms to deduplicate in-memory
+    const { data: recentAlarms } = await supabase
+      .from("alarms")
+      .select("tag_id, alarm_type")
+      .gte("created_at", tenMinutesAgo);
+    const recentAlarmSet = new Set(
+      (recentAlarms || []).map((a: any) => `${a.tag_id}-${a.alarm_type}`)
+    );
 
     for (const entry of Array.from(byTag.values())) {
       const { sensor, value, topic, at } = entry;
       if (sensor.instrumentType === "pump" || sensor.instrumentType === "totalizer") continue;
 
-      const cfg = configs?.find(c => c.tag_id === sensor.id && c.section === sensor.section);
+      const cfg = configs?.find((c: any) => c.tag_id === sensor.id && c.section === sensor.section);
       const dbId = cfg?.id;
       const alarmEnabled = cfg ? cfg.alarm_enabled !== false : true;
 
@@ -382,30 +391,21 @@ Deno.serve(async (req) => {
         alarmType = "Low";
       }
 
-      if (alarmType) {
+      if (alarmType && !recentAlarmSet.has(`${sensor.id}-${alarmType}`)) {
         const thresholdVal = alarmType === "High" ? highThreshold : lowThreshold;
-        const { count, error: countErr } = await supabase
-          .from("alarms")
-          .select("id", { count: "exact", head: true })
-          .eq("tag_id", sensor.id)
-          .eq("alarm_type", alarmType)
-          .gte("created_at", tenMinutesAgo);
-
-        if (!countErr && (count || 0) === 0) {
-          alarmsToInsert.push({
-            tag_id: sensor.id,
-            tag_config_id: dbId || null,
-            label: sensor.label,
-            value,
-            unit: sensor.unit,
-            alarm_type: alarmType,
-            message: `Alarm: ${sensor.label} ${alarmType} (${value.toFixed(2)} ${sensor.unit}) - Threshold: ${thresholdVal}`,
-            section: sensor.section,
-            source: "backend:5min",
-            acknowledged: false,
-            email_sent: false,
-          });
-        }
+        alarmsToInsert.push({
+          tag_id: sensor.id,
+          tag_config_id: dbId || null,
+          label: sensor.label,
+          value,
+          unit: sensor.unit,
+          alarm_type: alarmType,
+          message: `Alarm: ${sensor.label} ${alarmType} (${value.toFixed(2)} ${sensor.unit}) - Threshold: ${thresholdVal}`,
+          section: sensor.section,
+          source: "backend:5min",
+          acknowledged: false,
+          email_sent: false,
+        });
       }
     }
 
@@ -414,10 +414,11 @@ Deno.serve(async (req) => {
       if (alarmErr) console.error("Failed to insert backend alarms:", alarmErr.message);
     }
 
-    await supabase.rpc("refresh_consumption_from_historian", {
+    const { error: rpcErr } = await supabase.rpc("refresh_consumption_from_historian", {
       _from: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
       _to: new Date().toISOString(),
-    }).then(() => {}, () => {});
+    });
+    if (rpcErr) console.warn("Consumption refresh failed:", rpcErr.message);
 
     return new Response(JSON.stringify({
       success: true,

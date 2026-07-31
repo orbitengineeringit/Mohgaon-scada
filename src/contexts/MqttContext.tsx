@@ -61,8 +61,13 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
   const [messagesPerSecond, setMessagesPerSecond] = useState(0);
   const [lastError, setLastError] = useState<string | null>(null);
   const clientRef = useRef<MqttClient | null>(null);
+  const isConnectingRef = useRef(false);
+  const wasConnectedRef = useRef(false);
+  const configRef = useRef(config);
   const messageCountRef = useRef(0);
   const connectRef = useRef<() => Promise<void>>();
+
+  useEffect(() => { configRef.current = config; }, [config]);
 
   useEffect(() => { onMessageRef.current = onMessage; }, [onMessage]);
 
@@ -144,7 +149,7 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
       }
     };
     loadConfig();
-    return () => { if (clientRef.current) clientRef.current.end(true); };
+    return () => { if (clientRef.current) { clientRef.current.end(true); clientRef.current = null; } };
   }, []);
 
   useEffect(() => {
@@ -250,7 +255,8 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
   }, []);
 
   const connect = useCallback(async () => {
-    if (isConnecting || isConnected) return;
+    if (isConnectingRef.current || clientRef.current?.connected) return;
+    isConnectingRef.current = true;
     setIsConnecting(true);
     setLastError(null);
 
@@ -280,16 +286,34 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
       client.on('connect', () => {
         setIsConnected(true);
         setIsConnecting(false);
-        toast.success('MQTT Connected');
+        isConnectingRef.current = false;
+        if (!wasConnectedRef.current) {
+          toast.success('MQTT Connected');
+          wasConnectedRef.current = true;
+        }
         const topics = ALL_MQTT_TOPICS;
         client.subscribe(topics, (err) => {
           if (err) { logError('MqttContext.subscribe', err); }
           else logInfo('MQTT', `Subscribed to ${topics.length} topics`);
         });
-        if (config.id) {
-          supabase.from('mqtt_config').update({ is_connected: true, last_connected_at: new Date().toISOString() }).eq('id', config.id).then(() => {});
+        if (configRef.current.id) {
+          supabase.from('mqtt_config').update({ is_connected: true, last_connected_at: new Date().toISOString() }).eq('id', configRef.current.id).then(() => {});
         }
       });
+
+      const throttledUpdate = (() => {
+        let pending: MqttMessage | null = null;
+        let rafId: number | null = null;
+        return (msg: MqttMessage) => {
+          pending = msg;
+          if (rafId === null) {
+            rafId = requestAnimationFrame(() => {
+              if (pending) setLastMessage(pending);
+              rafId = null;
+            });
+          }
+        };
+      })();
 
       client.on('message', (topic, payload) => {
         const payloadStr = payload.toString();
@@ -298,7 +322,7 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
         const combinedPayload: Record<string, string | number> = {};
         parsedData.forEach(data => Object.assign(combinedPayload, data));
         const message: MqttMessage = { topic, payload: combinedPayload, timestamp: new Date(), section, subsection, rawPayload: payloadStr };
-        setLastMessage(message);
+        throttledUpdate(message);
         setMessageCount(prev => prev + 1);
         messageCountRef.current++;
         if (onMessageRef.current) onMessageRef.current(message);
@@ -308,11 +332,14 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
         logError('MqttContext.connection', err);
         setLastError(err.message);
         setIsConnecting(false);
+        isConnectingRef.current = false;
       });
 
       client.on('close', () => {
         setIsConnected(false);
         setIsConnecting(false);
+        isConnectingRef.current = false;
+        wasConnectedRef.current = false;
         if (config.id) {
           supabase.from('mqtt_config').update({ is_connected: false }).eq('id', config.id).then(() => {});
         }
@@ -321,9 +348,11 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
       client.on('offline', () => {
         setIsConnected(false);
         setIsConnecting(false);
+        isConnectingRef.current = false;
       });
     } catch (error) {
       setIsConnecting(false);
+      isConnectingRef.current = false;
       setLastError(error instanceof Error ? error.message : 'Connection failed');
     }
   }, [config, isConnecting, isConnected, parsePayload, determineSectionFromTopic]);

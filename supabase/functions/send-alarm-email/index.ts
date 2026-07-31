@@ -125,7 +125,8 @@ const handler = async (req: Request): Promise<Response> => {
       });
     }
 
-    await supabase.from('alarms').update({ email_sent: true, email_sent_at: new Date().toISOString() }).eq('id', alarmData.alarmId);
+    // NOTE: email_sent is updated AFTER successful SMTP delivery (see below).
+    // This prevents permanently losing alarms if SMTP fails.
 
     const smtpUser = Deno.env.get('SMTP_USER');
     const smtpPass = Deno.env.get('SMTP_PASSWORD');
@@ -165,6 +166,9 @@ const handler = async (req: Request): Promise<Response> => {
         user: smtpUser,
         pass: smtpPass,
       },
+      connectionTimeout: 10000,
+      greetingTimeout: 5000,
+      socketTimeout: 15000,
     });
 
     const mailOptions = {
@@ -206,6 +210,9 @@ const handler = async (req: Request): Promise<Response> => {
 
     const info = await transporter.sendMail(mailOptions);
     console.log('[send-alarm-email] Alarm Email sent successfully:', info.messageId);
+
+    // Mark email_sent ONLY after confirmed SMTP delivery
+    await supabase.from('alarms').update({ email_sent: true, email_sent_at: new Date().toISOString() }).eq('id', alarmData.alarmId);
 
     return new Response(JSON.stringify({ success: true, message: 'Email sent', emailId: info.messageId }), {
       status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },

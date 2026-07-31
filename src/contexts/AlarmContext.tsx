@@ -78,32 +78,47 @@ export const AlarmProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     useEffect(() => {
         loadAlarms();
 
+        const mapAlarmRow = (a: any): AlarmLog => ({
+            id: a.id,
+            timestamp: a.created_at,
+            tagId: a.tag_id,
+            tagConfigId: a.tag_config_id || undefined,
+            label: a.label,
+            value: Number.isFinite(Number(a.value)) ? Number(a.value) : 0,
+            unit: a.unit,
+            type: a.alarm_type as 'High' | 'Low' | 'Disconnect',
+            message: a.message,
+            section: a.section as 'intake' | 'oht' | 'wtp',
+            acknowledged: a.acknowledged,
+            emailSent: a.email_sent,
+            source: a.source as 'browser' | 'backend:5min',
+        });
+
         const channel = supabase
             .channel('alarms-realtime')
             .on(
                 'postgres_changes',
                 {
-                    event: 'INSERT',
+                    event: '*',
                     schema: 'public',
                     table: 'alarms',
                 },
                 (payload) => {
-                    const a = payload.new as any;
-                    setAlarms(prev => [{
-                        id: a.id,
-                        timestamp: a.created_at,
-                        tagId: a.tag_id,
-                        tagConfigId: a.tag_config_id || undefined,
-                        label: a.label,
-                        value: Number(a.value),
-                        unit: a.unit,
-                        type: a.alarm_type as 'High' | 'Low' | 'Disconnect',
-                        message: a.message,
-                        section: a.section as 'intake' | 'oht' | 'wtp',
-                        acknowledged: a.acknowledged,
-                        emailSent: a.email_sent,
-                        source: a.source as 'browser' | 'backend:5min',
-                    }, ...prev].slice(0, 500));
+                    if (payload.eventType === 'INSERT') {
+                        setAlarms(prev => [mapAlarmRow(payload.new), ...prev].slice(0, 500));
+                    } else if (payload.eventType === 'UPDATE') {
+                        const updated = payload.new as any;
+                        setAlarms(prev => prev.map(a =>
+                            a.id === updated.id ? { ...a, acknowledged: updated.acknowledged, emailSent: updated.email_sent } : a
+                        ));
+                    } else if (payload.eventType === 'DELETE') {
+                        const deleted = payload.old as any;
+                        if (deleted?.id) {
+                            setAlarms(prev => prev.filter(a => a.id !== deleted.id));
+                        } else {
+                            loadAlarms();
+                        }
+                    }
                 }
             )
             .subscribe();
@@ -119,6 +134,13 @@ export const AlarmProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         const lastFired = recentAlarmKeys.current.get(key) || 0;
         if (now - lastFired < 10 * 60 * 1000) return; // skip duplicates in last 10 minutes
         recentAlarmKeys.current.set(key, now);
+
+        // Prune stale entries older than 10 minutes to prevent memory leak
+        if (recentAlarmKeys.current.size > 100) {
+            for (const [k, ts] of recentAlarmKeys.current.entries()) {
+                if (now - ts > 10 * 60 * 1000) recentAlarmKeys.current.delete(k);
+            }
+        }
 
         try {
             // Insert into database

@@ -354,8 +354,9 @@ const HistoryPage: React.FC = () => {
 
       setTotalCount(countResult.count || 0);
       const sorted = [...(dataResult.data as unknown as HistorianLog[])].sort((a, b) => {
-        const ta = Math.floor(new Date(a.timestamp).getTime() / 60000);
-        const tb = Math.floor(new Date(b.timestamp).getTime() / 60000);
+        const BUCKET_MS = 5 * 60 * 1000;
+        const ta = Math.floor(new Date(a.timestamp).getTime() / BUCKET_MS);
+        const tb = Math.floor(new Date(b.timestamp).getTime() / BUCKET_MS);
         if (ta !== tb) return tb - ta;
         const oa = getSectionOrder(a.section, a.tag_id);
         const ob = getSectionOrder(b.section, b.tag_id);
@@ -372,7 +373,7 @@ const HistoryPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [globalFilters.startDate, globalFilters.endDate, getSectionFilters, getOhtTagPrefixes, globalFilters.assets, toast]);
+  }, [globalFilters.startDate, globalFilters.endDate, globalFilters.density, getSectionFilters, getOhtTagPrefixes, globalFilters.assets, pageSize, toast]);
 
   useEffect(() => {
     if (autoRefresh && globalFilters.startDate && globalFilters.endDate && totalCount > 0) {
@@ -670,8 +671,9 @@ const HistoryPage: React.FC = () => {
   // same minute Intake → WTP → OHT-1/2/3 → tag (so user sees all sections together per time).
   const sortedLogs = useMemo(() => {
     return [...logs].sort((a, b) => {
-      const ta = Math.floor(new Date(a.timestamp).getTime() / 60000);
-      const tb = Math.floor(new Date(b.timestamp).getTime() / 60000);
+      const BUCKET_MS = 5 * 60 * 1000;
+      const ta = Math.floor(new Date(a.timestamp).getTime() / BUCKET_MS);
+      const tb = Math.floor(new Date(b.timestamp).getTime() / BUCKET_MS);
       if (ta !== tb) return tb - ta;
       const oa = getSectionOrder(a.section, a.tag_id);
       const ob = getSectionOrder(b.section, b.tag_id);

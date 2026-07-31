@@ -25,7 +25,7 @@ const WtpAnalyticsPage = memo(() => {
         </div>
         
         <div className="space-y-4 sm:space-y-6 opacity-0 animate-fade-in" style={{ animationDelay: '250ms' }}>
-          <PumpAnalyticsCard section="wtp" pumpIds={['WTP-Pump1', 'WTP-Pump2', 'WTP-Pump3', 'WTP-Pump4']} />
+          <PumpAnalyticsCard section="wtp" />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 items-start">
             <ConsumptionCard section="wtp" />
             <SystemHealthCard section="wtp" />

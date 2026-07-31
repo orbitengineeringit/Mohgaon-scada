@@ -113,7 +113,7 @@ const CombinedPtCard: React.FC<{
 const IntakePage: React.FC = () => {
   const { intakeTags } = useScada();
   const navigate = useNavigate();
-  const [viewMode, setViewMode] = useState<'cards' | 'process'>('cards');
+  const [viewMode, setViewMode] = useState<'cards' | 'process'>('process');
 
   const findTag = (sensorId: string) => intakeTags.find(t => t.id === sensorId);
 

@@ -26,7 +26,7 @@ const IntakeAnalyticsPage = memo(() => {
         
         <div className="space-y-4 sm:space-y-6 opacity-0 animate-fade-in" style={{ animationDelay: '200ms' }}>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 items-start">
-            <PumpAnalyticsCard section="intake" pumpIds={['INT-Pump1', 'INT-Pump2']} />
+            <PumpAnalyticsCard section="intake" />
             <ConsumptionCard section="intake" />
           </div>
           <SystemHealthCard section="intake" />

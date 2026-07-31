@@ -99,7 +99,7 @@ const OhtSubsection: React.FC<{ config: OhtConfig; tags: any[]; viewMode: 'cards
 const OhtPage: React.FC = () => {
   const { ohtTags } = useScada();
   const navigate = useNavigate();
-  const [viewMode, setViewMode] = useState<'cards' | 'process'>('cards');
+  const [viewMode, setViewMode] = useState<'cards' | 'process'>('process');
 
   const ohtConfigs: OhtConfig[] = [
     {

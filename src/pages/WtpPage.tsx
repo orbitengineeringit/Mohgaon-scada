@@ -104,7 +104,7 @@ const WtpCombinedPtCard: React.FC<{
 const WtpPage: React.FC = () => {
   const { wtpTags } = useScada();
   const navigate = useNavigate();
-  const [viewMode, setViewMode] = useState<'cards' | 'process'>('cards');
+  const [viewMode, setViewMode] = useState<'cards' | 'process'>('process');
 
   const findTag = (sensorId: string) => wtpTags.find(t => t.id === sensorId);
 

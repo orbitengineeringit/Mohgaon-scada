@@ -92,7 +92,7 @@ const sensorToTag = (sensor: MohgaonSensor): TagData => ({
   mqttKey: sensor.mqttKey,
   value: 0,
   timestamp: new Date(),
-  isActive: true,
+  isActive: !sensor.notInstalled,
   status: 'unknown' as const,
   section: sensor.section,
   subsection: sensor.subsection,
@@ -157,6 +157,7 @@ export const ScadaProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             return {
               ...tag,
               dbId: config?.id,
+              isActive: config?.is_active ?? tag.isActive,
               highSetpoint: config?.high_setpoint != null ? Number(config.high_setpoint) : undefined,
               lowSetpoint: config?.low_setpoint != null ? Number(config.low_setpoint) : undefined,
               alarmEmails: [],

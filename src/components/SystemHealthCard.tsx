@@ -15,7 +15,7 @@ interface SystemHealthCardProps {
 const SystemHealthCard: React.FC<SystemHealthCardProps> = memo(({ section }) => {
   const { intakeTags, wtpTags } = useScada();
 
-  const tags = section === 'intake' ? intakeTags : wtpTags;
+  const tags = (section === 'intake' ? intakeTags : wtpTags).filter(t => t.isActive);
 
   const stats = useMemo(() => {
     const analog = tags.filter(t => t.sensorType === 'analog');

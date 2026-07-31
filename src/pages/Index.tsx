@@ -20,7 +20,7 @@ const Index = () => {
     );
   }
 
-  const installedTags = (tags: typeof intakeTags) => tags.filter(t => !t.notInstalled);
+  const installedTags = (tags: typeof intakeTags) => tags.filter(t => t.isActive);
 
   const getDataActiveCount = (tags: typeof intakeTags) => {
     return installedTags(tags).filter(t => t.value !== 0 || (t.lastDataTime && t.lastDataTime.getTime() > 0)).length;

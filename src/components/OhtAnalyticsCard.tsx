@@ -137,11 +137,15 @@ const OhtAnalyticsCard: React.FC = memo(() => {
   const { ohtTags } = useScada();
 
   const tankData: TankData[] = useMemo(() => {
-    return Array.from({ length: 4 }, (_, i) => {
-      const prefix = `OHT${i + 1}`;
+    const activePrefixes = Array.from(new Set(
+      ohtTags.filter(t => t.isActive).map(t => t.id.split('-')[0])
+    )).filter(p => p.startsWith('OHT'));
+
+    return activePrefixes.map(prefix => {
+      const num = prefix.replace('OHT', '');
       const findVal = (key: string) => ohtTags.find(t => t.id === `${prefix}-${key}`)?.value ?? 0;
       return {
-        label: `#${i + 1}`,
+        label: `#${num}`,
         level: findVal('LT'),
         flow: findVal('Flow-IN'),
         pressure: findVal('PT'),
@@ -150,7 +154,7 @@ const OhtAnalyticsCard: React.FC = memo(() => {
   }, [ohtTags]);
 
   const totalFlow = tankData.reduce((s, t) => s + t.flow, 0);
-  const avgLevel = tankData.reduce((s, t) => s + t.level, 0) / 4;
+  const avgLevel = tankData.length > 0 ? tankData.reduce((s, t) => s + t.level, 0) / tankData.length : 0;
   const activeTanks = tankData.filter(t => t.flow > 0 || t.level > 0).length;
 
   return (

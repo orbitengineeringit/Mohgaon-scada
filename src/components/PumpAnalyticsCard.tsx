@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Clock, Play, BarChart3, Zap, TrendingUp, Timer, Activity, Gauge, Power } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { logError } from '@/lib/errorLogger';
+import { useScada } from '@/contexts/ScadaContext';
 
 interface PumpAnalyticsData {
   pump_id: string;
@@ -27,7 +28,6 @@ interface HistoricalDay {
 
 interface PumpAnalyticsCardProps {
   section: 'intake' | 'wtp';
-  pumpIds: string[];
 }
 
 const formatRuntime = (seconds: number): string => {
@@ -148,7 +148,13 @@ const TrendWaveChart: React.FC<{ data: number[]; labels: string[] }> = memo(({ d
 });
 TrendWaveChart.displayName = 'TrendWaveChart';
 
-const PumpAnalyticsCard: React.FC<PumpAnalyticsCardProps> = memo(({ section, pumpIds }) => {
+const PumpAnalyticsCard: React.FC<PumpAnalyticsCardProps> = memo(({ section }) => {
+  const { intakeTags, wtpTags } = useScada();
+  const pumpIds = useMemo(() => {
+    const tags = section === 'intake' ? intakeTags : wtpTags;
+    return tags.filter(t => t.isActive && t.instrumentType === 'pump').map(t => t.id);
+  }, [section, intakeTags, wtpTags]);
+
   const pumpIdsKey = pumpIds.join(',');
 
   const { data: queryData, isLoading } = useQuery({

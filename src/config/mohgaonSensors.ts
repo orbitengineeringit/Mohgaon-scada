@@ -37,7 +37,7 @@ const createOhtSensors = (ohtNum: number): MohgaonSensor[] => {
     { id: `${prefix}-PT`, mqttKey: 'PT_01', label: 'Pressure (PT)', unit: 'Bar', min: 0, max: 10, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'pt' },
     { id: `${prefix}-LT`, mqttKey: 'LEVEL', label: 'Level (LT)', unit: '%', min: 0, max: 100, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'lt' },
     { id: `${prefix}-Flow-IN`, mqttKey: 'FLOW', label: 'Flow Meter (Inlet)', unit: 'm³/hr', min: 0, max: 50, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'flow' },
-    { id: `${prefix}-Flow-OUT`, mqttKey: 'FLOW_OUT', label: 'Flow Meter (Outlet)', unit: 'm³/hr', min: 0, max: 50, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'flow', notInstalled: true },
+    { id: `${prefix}-Flow-OUT`, mqttKey: 'FLOW_OUT', label: 'Flow Meter (Outlet)', unit: 'm³/hr', min: 0, max: 50, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'flow' },
     { id: `${prefix}-FCV`, mqttKey: 'FCV', label: 'Flow Control Valve', unit: '%', min: 0, max: 100, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'fcv' },
     { id: `${prefix}-Totalizer`, mqttKey: 'TOTALIZER', label: 'Totalizer', unit: 'm³', min: 0, max: 999999, section: 'oht', subsection: sub, type: 'totalizer', instrumentType: 'totalizer' },
   ];
@@ -75,13 +75,15 @@ export const WTP_SENSORS: MohgaonSensor[] = [
   { id: 'WTP-PT3', mqttKey: 'CWR_PT_04', label: 'HT Pump 3 PT', unit: 'Bar', min: 0, max: 10, section: 'wtp', type: 'analog', instrumentType: 'pt', notInstalled: true },
   { id: 'WTP-PT4', mqttKey: 'CWR_PT_05', label: 'HT Pump 4 PT', unit: 'Bar', min: 0, max: 10, section: 'wtp', type: 'analog', instrumentType: 'pt', notInstalled: true },
   { id: 'WTP-CombinedPT2', mqttKey: 'CWR_PT_06', label: 'Combined Pressure (P3+P4)', unit: 'Bar', min: 0, max: 10, section: 'wtp', type: 'analog', instrumentType: 'combined_pt', notInstalled: true },
-  // Flow (Inlet + Outlet)
-  { id: 'WTP-Flow-IN', mqttKey: 'FLOW', label: 'Flow Meter (Inlet)', unit: 'm³/hr', min: 0, max: 200, section: 'wtp', type: 'analog', instrumentType: 'flow' },
-  { id: 'WTP-Flow-OUT', mqttKey: 'FLOW_OUT', label: 'Flow Meter (Outlet)', unit: 'm³/hr', min: 0, max: 200, section: 'wtp', type: 'analog', instrumentType: 'flow', notInstalled: true },
-  { id: 'WTP-Totalizer', mqttKey: 'TOTALIZER', label: 'Totalizer', unit: 'm³', min: 0, max: 999999, section: 'wtp', type: 'totalizer', instrumentType: 'totalizer' },
+  // Raw water inlet
+  { id: 'WTP-Flow-IN', mqttKey: 'FLOW', label: 'Flow Meter (Inlet)', unit: 'm³/hr', min: 0, max: 200, section: 'wtp', subsection: 'raw-water', type: 'analog', instrumentType: 'flow' },
+  { id: 'WTP-Totalizer-IN', mqttKey: 'TOTALIZER_IN', label: 'Totalizer (Inlet)', unit: 'm³', min: 0, max: 999999, section: 'wtp', subsection: 'raw-water', type: 'totalizer', instrumentType: 'totalizer' },
+  // Outlet
+  { id: 'WTP-Flow-OUT', mqttKey: 'FLOW_OUT', label: 'Flow Meter (Outlet)', unit: 'm³/hr', min: 0, max: 200, section: 'wtp', subsection: 'outlet', type: 'analog', instrumentType: 'flow' },
+  { id: 'WTP-Totalizer-OUT', mqttKey: 'TOTALIZER_OUT', label: 'Totalizer (Outlet)', unit: 'm³', min: 0, max: 999999, section: 'wtp', subsection: 'outlet', type: 'totalizer', instrumentType: 'totalizer' },
   // Inlet analyzers (installed)
-  { id: 'WTP-PH-IN', mqttKey: 'RAW_PH', label: 'pH Analyzer (Inlet)', unit: 'pH', min: 0, max: 14, section: 'wtp', subsection: 'inlet', type: 'analog', instrumentType: 'ph' },
-  { id: 'WTP-TA-IN', mqttKey: 'RAW_TR', label: 'Turbidity (Inlet)', unit: 'NTU', min: 0, max: 100, section: 'wtp', subsection: 'inlet', type: 'analog', instrumentType: 'turbidity' },
+  { id: 'WTP-PH-IN', mqttKey: 'RAW_PH', label: 'pH Analyzer (Inlet)', unit: 'pH', min: 0, max: 14, section: 'wtp', subsection: 'raw-water', type: 'analog', instrumentType: 'ph' },
+  { id: 'WTP-TA-IN', mqttKey: 'RAW_TR', label: 'Turbidity (Inlet)', unit: 'NTU', min: 0, max: 100, section: 'wtp', subsection: 'raw-water', type: 'analog', instrumentType: 'turbidity' },
   // Outlet analyzers
   { id: 'WTP-PH', mqttKey: 'PH', label: 'pH Analyzer (Outlet)', unit: 'pH', min: 0, max: 14, section: 'wtp', subsection: 'outlet', type: 'analog', instrumentType: 'ph' },
   { id: 'WTP-CL', mqttKey: 'CL', label: 'Chlorine (Outlet)', unit: 'mg/L', min: 0, max: 5, section: 'wtp', subsection: 'outlet', type: 'analog', instrumentType: 'chlorine' },
@@ -177,4 +179,4 @@ export const getPumpSensors = (section: SectionType): MohgaonSensor[] => {
 // Valid MQTT keys per section (only keys that actually come from MQTT)
 export const VALID_OHT_KEYS = ['PT', 'PT_01', 'LEVEL', 'Level', 'FLOW', 'Flow', 'FLOW_IN', 'FLOW_OUT', 'FCV', 'TOTALIZER'];
 export const VALID_INTAKE_KEYS = ['PT', 'PT_01', 'PT_02', 'PT_03', 'PT_COM', 'LEVEL', 'Level', 'FLOW', 'Flow', 'TOTALIZER', 'KW'];
-export const VALID_WTP_KEYS = ['CWR_LEVEL', 'BW_LEVEL', 'PT', 'PT_01', 'PT_02', 'PT_03', 'CWR_PT_04', 'CWR_PT_05', 'CWR_PT_06', 'FLOW', 'Flow', 'FLOW_IN', 'FLOW_OUT', 'PH', 'CL', 'TR', 'RAW_PH', 'RAW_TR', 'CW_PH', 'CW_CL', 'CW_TR', 'TOTALIZER', 'KW'];
+export const VALID_WTP_KEYS = ['CWR_LEVEL', 'BW_LEVEL', 'PT', 'PT_01', 'PT_02', 'PT_03', 'CWR_PT_04', 'CWR_PT_05', 'CWR_PT_06', 'FLOW', 'Flow', 'FLOW_IN', 'FLOW_OUT', 'PH', 'CL', 'TR', 'RAW_PH', 'RAW_TR', 'CW_PH', 'CW_CL', 'CW_TR', 'TOTALIZER_IN', 'TOTALIZER_OUT', 'KW'];

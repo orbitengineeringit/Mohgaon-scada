@@ -547,7 +547,7 @@ const WtpProcessSimulation: React.FC = () => {
   const phOutVal = findTag('WTP-PH')?.value ?? 0;
   const clOutVal = findTag('WTP-CL')?.value ?? 0;
   const taOutVal = findTag('WTP-TA')?.value ?? 0;
-  const totVal = findTag('WTP-Totalizer')?.value ?? 0;
+  const totVal = findTag('WTP-Totalizer-OUT')?.value ?? 0;
   const kwTag = undefined; // WTP-KW not installed
   const kwVal = 0;
   const kwConnection = 'no-data' as const;
@@ -759,7 +759,7 @@ const WtpProcessSimulation: React.FC = () => {
         tags={wtpTags}
         sensorIds={[
           'WTP-Flow-IN','WTP-Flow-OUT','WTP-LT-BW','WTP-LT-CW','WTP-PH-IN','WTP-TA-IN','WTP-PH','WTP-CL','WTP-TA',
-          'WTP-Totalizer','WTP-PT1','WTP-PT2','WTP-CombinedPT1','WTP-PT5'
+          'WTP-Totalizer-IN','WTP-Totalizer-OUT','WTP-PT1','WTP-PT2','WTP-CombinedPT1','WTP-PT5'
         ]}
       />
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>

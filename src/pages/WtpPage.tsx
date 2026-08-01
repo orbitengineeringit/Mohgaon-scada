@@ -131,7 +131,7 @@ const WtpPage: React.FC = () => {
 
   let idx = 0;
 
-  const sections = useMemo(() => {
+  const legacySections = useMemo(() => {
     const list = [];
 
     list.push({
@@ -260,6 +260,73 @@ const WtpPage: React.FC = () => {
 
     return list;
   }, [ltIds, ptIds, flowIds, inletAnalyzerIds, outletAnalyzerIds, pumpIds, wtpTags, totalizerSensor, sensorMap, pumpPtPairs]);
+
+  const rawWaterIds = useMemo(() => WTP_SENSORS.filter(s => s.subsection === 'raw-water' && !s.notInstalled).map(s => s.id), []);
+  const backwashIds = useMemo(() => ['WTP-LT-BW'].filter(id => !sensorMap[id]?.notInstalled), [sensorMap]);
+  const clearWaterIds = useMemo(() => [
+    'WTP-LT-CW', 'WTP-Pump1', 'WTP-Pump2', 'WTP-PT1', 'WTP-PT2', 'WTP-CombinedPT1',
+  ].filter(id => !sensorMap[id]?.notInstalled), [sensorMap]);
+  const outletIds = useMemo(() => WTP_SENSORS.filter(s => s.subsection === 'outlet' && !s.notInstalled).map(s => s.id), []);
+
+  const renderSensorCard = (id: string, pumpComponent?: 'wtp') => {
+    const sensor = sensorMap[id];
+    const tag = findTag(id);
+    if (!sensor || !tag) return null;
+    return <InstrumentCard tag={tag} sensor={sensor} section="wtp" index={0} pumpComponent={pumpComponent} />;
+  };
+
+  const sections = useMemo(() => [
+    {
+      id: 'wtp-sec-raw-water',
+      content: (
+        <div className="mb-8">
+          <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-primary pulse-live" />Raw Water / Inlet</h3>
+          <SortableCardGrid groupKey="wtp-raw-water" sensorIds={rawWaterIds} className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6 w-full">
+            {(orderedIds) => orderedIds.map(id => <SortableItem key={id} id={id}>{renderSensorCard(id)}</SortableItem>)}
+          </SortableCardGrid>
+        </div>
+      ),
+    },
+    {
+      id: 'wtp-sec-backwash',
+      content: (
+        <div className="mb-8">
+          <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-accent pulse-live" />Backwash</h3>
+          <SortableCardGrid groupKey="wtp-backwash" sensorIds={backwashIds} className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 max-w-4xl">
+            {(orderedIds) => orderedIds.map(id => <SortableItem key={id} id={id}>{renderSensorCard(id)}</SortableItem>)}
+          </SortableCardGrid>
+        </div>
+      ),
+    },
+    {
+      id: 'wtp-sec-clear-water',
+      content: (
+        <div className="mb-8">
+          <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-success pulse-live" />Clear Water</h3>
+          <SortableCardGrid groupKey="wtp-clear-water" sensorIds={clearWaterIds} className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6 w-full">
+            {(orderedIds) => orderedIds.map(id => (
+              <SortableItem key={id} id={id}>
+                {id === 'WTP-CombinedPT1'
+                  ? <WtpCombinedPtCard combinedId="WTP-CombinedPT1" label="Combined Pressure (P1+P2)" pt1Id="WTP-PT1" pt2Id="WTP-PT2" pump1Id="WTP-Pump1" pump2Id="WTP-Pump2" tags={wtpTags} />
+                  : renderSensorCard(id, id.startsWith('WTP-Pump') ? 'wtp' : undefined)}
+              </SortableItem>
+            ))}
+          </SortableCardGrid>
+        </div>
+      ),
+    },
+    {
+      id: 'wtp-sec-outlet',
+      content: (
+        <div className="mb-8">
+          <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-warning pulse-live" />Outlet</h3>
+          <SortableCardGrid groupKey="wtp-outlet-process" sensorIds={outletIds} className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6 w-full">
+            {(orderedIds) => orderedIds.map(id => <SortableItem key={id} id={id}>{renderSensorCard(id)}</SortableItem>)}
+          </SortableCardGrid>
+        </div>
+      ),
+    },
+  ], [rawWaterIds, backwashIds, clearWaterIds, outletIds, wtpTags, sensorMap]);
 
   return (
     <div className="min-h-screen flex flex-col bg-background grid-pattern">

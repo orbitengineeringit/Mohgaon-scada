@@ -105,25 +105,25 @@ const OhtPage: React.FC = () => {
     {
       title: 'OHT - 1 Ward No 04 - 300KL', label: '#1', color: 'bg-primary', colorHsl: '199 89% 48%',
       borderColor: 'border-primary/20', bgColor: 'bg-primary/[0.03]', iconBg: 'bg-primary/10',
-      sensors: OHT1_SENSORS, startIndex: 0, capacity: '5 instruments • PT, LT, Flow In, FCV, Totalizer',
+      sensors: OHT1_SENSORS, startIndex: 0, capacity: '6 instruments • PT, LT, Flow In, Flow Out, FCV, Totalizer',
       groupKey: 'oht-1',
     },
     {
       title: 'OHT - 2 Ward No 06 500KL', label: '#2', color: 'bg-accent', colorHsl: '38 92% 50%',
       borderColor: 'border-accent/20', bgColor: 'bg-accent/[0.03]', iconBg: 'bg-accent/10',
-      sensors: OHT2_SENSORS, startIndex: 5, capacity: '5 instruments • PT, LT, Flow In, FCV, Totalizer',
+      sensors: OHT2_SENSORS, startIndex: 6, capacity: '6 instruments • PT, LT, Flow In, Flow Out, FCV, Totalizer',
       groupKey: 'oht-2',
     },
     {
       title: 'OHT - 3 Ward No 06 200KL', label: '#3', color: 'bg-success', colorHsl: '142 71% 45%',
       borderColor: 'border-success/20', bgColor: 'bg-success/[0.03]', iconBg: 'bg-success/10',
-      sensors: OHT3_SENSORS, startIndex: 10, capacity: '5 instruments • PT, LT, Flow In, FCV, Totalizer',
+      sensors: OHT3_SENSORS, startIndex: 12, capacity: '6 instruments • PT, LT, Flow In, Flow Out, FCV, Totalizer',
       groupKey: 'oht-3',
     },
     {
       title: 'OHT - 4 Ward No 10 200KL', label: '#4', color: 'bg-indigo-500', colorHsl: '271 91% 65%',
       borderColor: 'border-indigo-500/20', bgColor: 'bg-indigo-500/[0.03]', iconBg: 'bg-indigo-500/10',
-      sensors: OHT4_SENSORS, startIndex: 15, capacity: '5 instruments • PT, LT, Flow In, FCV, Totalizer',
+      sensors: OHT4_SENSORS, startIndex: 18, capacity: '6 instruments • PT, LT, Flow In, Flow Out, FCV, Totalizer',
       groupKey: 'oht-4',
     },
   ];
@@ -149,7 +149,7 @@ const OhtPage: React.FC = () => {
             </div>
             <div className="min-w-0">
               <h2 className="text-xl leading-tight md:text-2xl font-bold text-foreground">Overhead Tanks (OHT)</h2>
-              <p className="text-sm text-muted-foreground">4 OHT units × 5 instruments each</p>
+              <p className="text-sm text-muted-foreground">4 OHT units × 6 instruments each</p>
             </div>
           </div>
           <div className="flex w-full flex-wrap items-center gap-2 sm:gap-3 sm:w-auto sm:flex-nowrap sm:justify-end">

@@ -137,7 +137,7 @@ export const ScadaProvider: React.FC<{ children: ReactNode }> = ({ children }) =
               tag_id: s.id,
               label: s.label,
               unit: s.unit,
-              is_active: true,
+              is_active: !s.notInstalled,
               activated_at: new Date().toISOString(),
               high_setpoint: defaults.high,
               low_setpoint: defaults.low,

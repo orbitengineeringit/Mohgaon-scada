@@ -54,13 +54,13 @@ export const useCloudTelemetrySync = ({
     updateTags(setOhtTags);
     updateTags(setWtpTags);
 
-    // Update derived pump states
+    // Update derived pump states (Only if PT sensor actually received valid data)
     const applyPumps = (setter: React.Dispatch<React.SetStateAction<TagData[]>>) => {
       setter(prev => {
         return prev.map(tag => {
           if (tag.instrumentType === 'pump') {
             const ptTag = prev.find(t => PT_TO_PUMP_MAP[t.id] === tag.id);
-            if (ptTag && ptTag.value !== undefined) {
+            if (ptTag && ptTag.status === 'connected' && ptTag.lastDataTime && ptTag.value !== null) {
               const isRunning = ptTag.value > 1.5 ? 1 : 0;
               return {
                 ...tag,
@@ -68,8 +68,16 @@ export const useCloudTelemetrySync = ({
                 status: 'connected' as const,
                 source: 'mqtt' as const,
                 isActive: true,
-                lastDataTime: now,
+                lastDataTime: ptTag.lastDataTime,
                 timestamp: now,
+              };
+            } else {
+              // If PT sensor has not received data, pump is OFF and disconnected
+              return {
+                ...tag,
+                value: 0,
+                status: 'disconnected' as const,
+                isActive: false,
               };
             }
           }

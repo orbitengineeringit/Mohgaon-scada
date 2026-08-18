@@ -15,7 +15,7 @@ interface SyncLog {
   endpoint: string;
   response_status: number | null;
   response_body: string | null;
-  request_payload: any;
+  request_payload: unknown;
   success: boolean;
   error_message: string | null;
   duration_ms: number | null;
@@ -40,8 +40,8 @@ const GisSyncStatus = () => {
   const [busy, setBusy] = useState(false);
   const [logs, setLogs] = useState<SyncLog[]>([]);
   const [logsLoaded, setLogsLoaded] = useState(false);
-  const [lastPayload, setLastPayload] = useState<any>(null);
-  const [lastResponse, setLastResponse] = useState<any>(null);
+  const [lastPayload, setLastPayload] = useState<unknown>(null);
+  const [lastResponse, setLastResponse] = useState<unknown>(null);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [showJson, setShowJson] = useState(false);
   const { intakeTags, ohtTags, wtpTags } = useScada();
@@ -79,22 +79,22 @@ const GisSyncStatus = () => {
     try {
       const { data, error } = await supabase.functions.invoke('gis-sync');
       if (error) throw error;
-      const proof = (data as any)?.proof;
-      const ok = (data as any)?.success;
+      const proof = (data as unknown)?.proof;
+      const ok = (data as unknown)?.success;
       if (ok) toast.success(`GIS sync OK (HTTP ${proof?.status})`);
       else toast.error(`GIS sync failed: HTTP ${proof?.status ?? 'n/a'}`);
-      localStorage.setItem('gov_last_payload', JSON.stringify((data as any).request_payload ?? null));
+      localStorage.setItem('gov_last_payload', JSON.stringify((data as unknown).request_payload ?? null));
       localStorage.setItem('gov_last_response', JSON.stringify(proof ?? null));
       localStorage.setItem('gov_last_sync_at', new Date().toISOString());
       readLocal();
       fetchLogs();
-    } catch (e: any) {
+    } catch (e: unknown) {
       toast.error(`Sync error: ${e?.message || e}`);
     } finally { setBusy(false); }
   };
 
   const live = useMemo(() => {
-    const get = (arr: any[], id: string) => arr.find(t => t.id === id)?.value;
+    const get = (arr: unknown[], id: string) => arr.find(t => t.id === id)?.value;
     const f = (n: number | undefined, d = 2) => (n == null || isNaN(Number(n)) ? '—' : Number(n).toFixed(d));
     const mld = (m3hr: number | undefined) => (m3hr == null ? '—' : (Number(m3hr) * 0.024).toFixed(3));
 
@@ -232,7 +232,7 @@ const GisSyncStatus = () => {
               label="LAST PUSHED TIME"
               icon={<Clock className="h-4 w-4 text-primary" />}
               value={<span className="text-base font-bold font-mono">{lastTimeStr}</span>}
-              accent={<span className="text-[10px] text-muted-foreground">1 hr cycle · manual any time</span>}
+              accent={<span className="text-[10px] text-muted-foreground">1 hr cycle · manual unknown time</span>}
             />
             <div className="rounded-xl border bg-card p-3 flex flex-col gap-2">
               <div className="text-[10px] font-bold tracking-wider text-muted-foreground">MANUAL SYNC OVERRIDE</div>
@@ -363,7 +363,7 @@ const StatCard = ({ label, icon, value, accent }: {
 const StationCard = ({ label, deviceId, success, unknown: unknownProp, status, duration, timeStr, rows, payload, responseText }: {
   label: string; deviceId: string; success: boolean; unknown?: boolean;
   status?: number | null; duration?: number | null; timeStr: string;
-  rows: ParamRow[]; payload: any; responseText?: string | null;
+  rows: ParamRow[]; payload: unknown; responseText?: string | null;
 }) => {
   const [showJson, setShowJson] = useState(false);
   const [showResp, setShowResp] = useState(false);

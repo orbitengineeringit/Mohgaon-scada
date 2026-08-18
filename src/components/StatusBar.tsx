@@ -35,7 +35,9 @@ const StatusBar = memo(forwardRef<HTMLDivElement>((_, ref) => {
           </div>
           {/* MQTT Status Pill */}
           <div className="w-px h-3.5 bg-border/40 shrink-0 hidden sm:block" />
-          <div className={`flex items-center gap-1 sm:gap-1.5 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-lg text-[9px] sm:text-[10px] font-bold transition-all duration-300 border shrink-0 ${
+          <div
+            title={`MQTT Broker: ${config.brokerUrl || 'ws://mqtt.orbitengineerings.com:8080'} (${isConnected ? 'Connected' : 'Disconnected'})`}
+            className={`flex items-center gap-1 sm:gap-1.5 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-lg text-[9px] sm:text-[10px] font-bold transition-all duration-300 border shrink-0 ${
             isConnected
               ? 'bg-success/10 text-success border-success/20'
               : showConnecting

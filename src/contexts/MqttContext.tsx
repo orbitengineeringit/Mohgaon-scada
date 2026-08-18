@@ -3,7 +3,7 @@ import mqtt, { MqttClient, IClientOptions } from 'mqtt';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { logError, logDebug, logWarn, logInfo } from '@/lib/errorLogger';
-import { MQTT_TOPICS, ALL_MQTT_TOPICS, TOPIC_TO_SECTION, setTopicsFromDb } from '@/config/mohgaonSensors';
+import { MQTT_TOPICS, ALL_MQTT_TOPICS, TOPIC_TO_SECTION, DEFAULT_MQTT_TOPICS, setTopicsFromDb } from '@/config/mohgaonSensors';
 
 export interface MqttConfig {
   id?: string;
@@ -39,12 +39,20 @@ interface MqttContextType {
 }
 
 const getDefaultBrokerUrl = () => {
+  if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_MQTT_BROKER_URL) {
+    return import.meta.env.VITE_MQTT_BROKER_URL;
+  }
   const isSecure = typeof window !== 'undefined' && window.location.protocol === 'https:';
-  return isSecure ? 'wss://broker.hivemq.com:8884/mqtt' : 'ws://broker.hivemq.com:8000/mqtt';
+  return isSecure ? 'wss://mqtt.orbitengineerings.com:8080' : 'ws://mqtt.orbitengineerings.com:8080';
 };
+
+const defaultUsername = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_MQTT_USERNAME) || 'orbit';
+const defaultPassword = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_MQTT_PASSWORD) || 'H5WoayaqynLWpgqC';
 
 const defaultConfig: MqttConfig = {
   brokerUrl: getDefaultBrokerUrl(),
+  username: defaultUsername,
+  password: defaultPassword,
   autoConnect: true,
   topics: { ...MQTT_TOPICS },
 };
@@ -77,23 +85,23 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
         const { data } = await supabase.from('mqtt_config').select('*').limit(1).maybeSingle();
 
         // Fetch MQTT credentials & topics securely from Edge Function (never stored in frontend)
-        let mqttUsername: string | undefined = undefined;
-        let mqttPassword: string | undefined = undefined;
+        let mqttUsername: string | undefined = defaultUsername;
+        let mqttPassword: string | undefined = defaultPassword;
         let vaultTopics: Record<string, string> | undefined = undefined;
         try {
           const { data: session } = await supabase.auth.getSession();
           if (session?.session?.access_token) {
             const { data: creds, error: credErr } = await supabase.functions.invoke('get-mqtt-credentials');
             if (!credErr && creds) {
-              if (creds.username) mqttUsername = creds.username;
-              if (creds.password) mqttPassword = creds.password;
+              if (creds.username && creds.username !== 'AdminMohgaon') mqttUsername = creds.username;
+              if (creds.password && creds.password !== 'Admin@mohgaon56978') mqttPassword = creds.password;
               if (creds.topics && typeof creds.topics === 'object') {
                 vaultTopics = creds.topics;
                 setTopicsFromDb(creds.topics);
               }
               logInfo('MqttContext', 'MQTT credentials & topics loaded from Vault');
             } else {
-              logWarn('MqttContext', 'Could not load MQTT credentials from Vault — broker may require manual entry');
+              logWarn('MqttContext', 'Could not load MQTT credentials from Vault — using default broker credentials');
             }
           }
         } catch (credFetchErr) {
@@ -101,19 +109,19 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
         }
 
         if (data) {
-          let brokerUrl = data.broker_url;
+          let brokerUrl = data.broker_url || getDefaultBrokerUrl();
           const isSecure = typeof window !== 'undefined' && window.location.protocol === 'https:';
           if (isSecure && brokerUrl.startsWith('ws://')) {
             brokerUrl = brokerUrl.replace('ws://', 'wss://');
             if (brokerUrl.includes('broker.hivemq.com:8000')) brokerUrl = brokerUrl.replace(':8000', ':8884');
           }
           const dbTopics = {
-            OHT1: data.oht_topic || '',
-            OHT2: (data as any).oht_topic_2 || '',
-            OHT3: (data as any).oht_topic_3 || '',
-            OHT4: (data as any).oht_topic_4 || '',
-            INTAKE: data.intake_topic || '',
-            WTP: (data as any).wtp_topic || '',
+            OHT1: data.oht_topic || DEFAULT_MQTT_TOPICS.OHT1,
+            OHT2: (data as any).oht_topic_2 || DEFAULT_MQTT_TOPICS.OHT2,
+            OHT3: (data as any).oht_topic_3 || DEFAULT_MQTT_TOPICS.OHT3,
+            OHT4: (data as any).oht_topic_4 || DEFAULT_MQTT_TOPICS.OHT4,
+            INTAKE: data.intake_topic || DEFAULT_MQTT_TOPICS.INTAKE,
+            WTP: (data as any).wtp_topic || DEFAULT_MQTT_TOPICS.WTP,
           };
           const mergedTopics = {
             ...dbTopics,
@@ -125,11 +133,11 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
             username: mqttUsername,
             password: mqttPassword,
             clientId: data.client_id || undefined,
-            autoConnect: data.auto_connect,
+            autoConnect: data.auto_connect !== false,
             topics: mergedTopics,
           });
           setTopicsFromDb(mergedTopics);
-          if (data.auto_connect) connectRef.current?.();
+          connectRef.current?.();
         } else {
           // No DB config — still apply credentials and topics if loaded
           if (vaultTopics || mqttUsername) {
@@ -170,6 +178,8 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
         if (Array.isArray(rData)) {
           rData.forEach((item: any) => {
             if (item && item.name !== undefined && item.value !== undefined) {
+              // Skip items where the PLC error flag indicates a sensor fault (err !== '0')
+              if (item.err !== undefined && String(item.err) !== '0') return;
               const val = typeof item.value === 'number' ? item.value : (isNaN(Number(item.value)) || item.value === '' || item.value === null ? item.value : Number(item.value));
               results.push({ [item.name]: val });
             }
@@ -224,33 +234,51 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
     return results;
   }, []);
 
-  const determineSectionFromTopic = useCallback((topic: string): { section: 'oht' | 'intake' | 'wtp' | 'unknown'; subsection?: string } => {
-    const mapping = TOPIC_TO_SECTION[topic];
+  const determineSectionFromTopic = useCallback((topic: string, payloadStr?: string): { section: 'oht' | 'intake' | 'wtp' | 'unknown'; subsection?: string } => {
+    const cleanTopic = topic.trim();
+    const mapping = TOPIC_TO_SECTION[cleanTopic] || TOPIC_TO_SECTION[topic];
     if (mapping) return { section: mapping.section, subsection: mapping.subsection };
-    if (topic.includes('OHT')) {
-      if (topic.includes('OHT01') || topic.includes('OHT-1') || topic.includes('OHT1')) {
+
+    for (const [key, tPath] of Object.entries(DEFAULT_MQTT_TOPICS)) {
+      if (tPath && (tPath === topic || tPath === cleanTopic)) {
+        if (key === 'INTAKE') return { section: 'intake' };
+        if (key === 'WTP') return { section: 'wtp' };
+        if (key === 'OHT1') return { section: 'oht', subsection: 'OHT-1' };
+        if (key === 'OHT2') return { section: 'oht', subsection: 'OHT-2' };
+        if (key === 'OHT3') return { section: 'oht', subsection: 'OHT-3' };
+        if (key === 'OHT4') return { section: 'oht', subsection: 'OHT-4' };
+      }
+    }
+
+    if (topic.includes('OHT') || topic.includes('Ov1h') || topic.includes('Ov2h') || topic.includes('Ov3h') || topic.includes('Ov4h')) {
+      if (topic.includes('OHT01') || topic.includes('OHT-1') || topic.includes('OHT1') || topic.includes('Ov1h')) {
         return { section: 'oht', subsection: 'OHT-1' };
       }
-      if (topic.includes('OHT02') || topic.includes('OHT-2') || topic.includes('OHT2')) {
+      if (topic.includes('OHT02') || topic.includes('OHT-2') || topic.includes('OHT2') || topic.includes('Ov2h')) {
         return { section: 'oht', subsection: 'OHT-2' };
       }
-      if (topic.includes('OHT03') || topic.includes('OHT-3') || topic.includes('OHT3')) {
+      if (topic.includes('OHT03') || topic.includes('OHT-3') || topic.includes('OHT3') || topic.includes('Ov3h')) {
         return { section: 'oht', subsection: 'OHT-3' };
       }
-      if (topic.includes('OHT04') || topic.includes('OHT-4') || topic.includes('OHT4')) {
+      if (topic.includes('OHT04') || topic.includes('OHT-4') || topic.includes('OHT4') || topic.includes('Ov4h')) {
         return { section: 'oht', subsection: 'OHT-4' };
       }
-      // Fallback matching logic based on topic tail/identifier
-      if (topic.endsWith('/0000000001') && !topic.includes('OHT02') && !topic.includes('OHT03') && !topic.includes('OHT04')) {
-        return { section: 'oht', subsection: 'OHT-1' };
-      }
-      if (topic.endsWith('/0000000002') || topic.includes('0000000002')) return { section: 'oht', subsection: 'OHT-2' };
-      if (topic.endsWith('/0000000003') || topic.includes('0000000003')) return { section: 'oht', subsection: 'OHT-3' };
-      if (topic.endsWith('/0000000004') || topic.includes('0000000004')) return { section: 'oht', subsection: 'OHT-4' };
       return { section: 'oht' };
     }
-    if (topic.includes('INTAKE') || topic.includes('INT')) return { section: 'intake' };
-    if (topic.includes('WTP')) return { section: 'wtp' };
+    const upperTopic = topic.toUpperCase();
+    if (upperTopic.includes('INTAKE') || upperTopic.includes('INT') || upperTopic.includes('NK3A')) return { section: 'intake' };
+    if (upperTopic.includes('WTP') || upperTopic.includes('TR8P') || topic.toLowerCase().includes('wtp')) return { section: 'wtp' };
+
+    // Payload tag inspection fallback
+    if (payloadStr) {
+      if (payloadStr.includes('INTAKE_') || payloadStr.includes('INT_')) return { section: 'intake' };
+      if (payloadStr.includes('RAW_PH') || payloadStr.includes('RAW_EFM') || payloadStr.includes('FLOWMETER') || payloadStr.includes('CWR_') || payloadStr.includes('BW_LT')) return { section: 'wtp' };
+      if (payloadStr.includes('OHT1_')) return { section: 'oht', subsection: 'OHT-1' };
+      if (payloadStr.includes('OHT2_')) return { section: 'oht', subsection: 'OHT-2' };
+      if (payloadStr.includes('OHT3_')) return { section: 'oht', subsection: 'OHT-3' };
+      if (payloadStr.includes('OHT4_')) return { section: 'oht', subsection: 'OHT-4' };
+    }
+
     return { section: 'unknown' };
   }, []);
 
@@ -291,10 +319,11 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
           toast.success('MQTT Connected');
           wasConnectedRef.current = true;
         }
-        const topics = ALL_MQTT_TOPICS;
-        client.subscribe(topics, (err) => {
+        const defaultTopicList = Object.values(DEFAULT_MQTT_TOPICS).filter(Boolean);
+        const topicsToSub = Array.from(new Set([...ALL_MQTT_TOPICS, ...defaultTopicList, 'mohgaon/#', 'mohgaon/wtp', 'OES/M7g4/#']));
+        client.subscribe(topicsToSub, (err) => {
           if (err) { logError('MqttContext.subscribe', err); }
-          else logInfo('MQTT', `Subscribed to ${topics.length} topics`);
+          else logInfo('MQTT', `Subscribed to ${topicsToSub.length} topics: ${topicsToSub.join(', ')}`);
         });
         if (configRef.current.id) {
           supabase.from('mqtt_config').update({ is_connected: true, last_connected_at: new Date().toISOString() }).eq('id', configRef.current.id).then(() => {});
@@ -318,7 +347,7 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
       client.on('message', (topic, payload) => {
         const payloadStr = payload.toString();
         const parsedData = parsePayload(payloadStr);
-        const { section, subsection } = determineSectionFromTopic(topic);
+        const { section, subsection } = determineSectionFromTopic(topic, payloadStr);
         const combinedPayload: Record<string, string | number> = {};
         parsedData.forEach(data => Object.assign(combinedPayload, data));
         const message: MqttMessage = { topic, payload: combinedPayload, timestamp: new Date(), section, subsection, rawPayload: payloadStr };

@@ -36,8 +36,8 @@ interface PlantAssistantProps {
 
 declare global {
   interface Window {
-    SpeechRecognition: any;
-    webkitSpeechRecognition: any;
+    SpeechRecognition: unknown;
+    webkitSpeechRecognition: unknown;
   }
 }
 
@@ -240,9 +240,9 @@ const AI_MODES: AIMode[] = [
 
 // Compute a live composite plant health score from currently active tags + alarm state
 const computePlantHealth = (
-  intakeTags: any[], ohtTags: any[], wtpTags: any[]
+  intakeTags: unknown[], ohtTags: unknown[], wtpTags: unknown[]
 ): { score: number; status: string; color: string; details: { label: string; ok: boolean }[] } => {
-  const all = [...intakeTags, ...ohtTags, ...wtpTags].filter((t: any) => t.isActive);
+  const all = [...intakeTags, ...ohtTags, ...wtpTags].filter((t: unknown) => t.isActive);
   if (all.length === 0) {
     return { score: 0, status: 'No Data', color: 'text-muted-foreground', details: [] };
   }
@@ -250,7 +250,7 @@ const computePlantHealth = (
   let warning = 0;
   let critical = 0;
   const details: { label: string; ok: boolean }[] = [];
-  all.forEach((t: any) => {
+  all.forEach((t: unknown) => {
     const status = (t.status ?? '').toLowerCase();
     if (status === 'critical' || status === 'alarm' || status === 'error') {
       critical++;
@@ -283,7 +283,7 @@ const PlantAssistant: React.FC<PlantAssistantProps> = ({ variant = 'compact', on
   const [isListening, setIsListening] = useState(false);
   const [quota, setQuota] = useState<{ used: number; remaining: number; limit: number } | null>(null);
   const [activeMode, setActiveMode] = useState<AIMode | null>(null);
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<unknown>(null);
   const scrollEndRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -313,7 +313,7 @@ const PlantAssistant: React.FC<PlantAssistantProps> = ({ variant = 'compact', on
         .from('user_roles')
         .select('role')
         .eq('user_id', user.id);
-      const isAdmin = (roles ?? []).some((r: any) => r.role === 'admin');
+      const isAdmin = (roles ?? []).some((r: unknown) => r.role === 'admin');
       if (isAdmin) {
         setQuota({ used: 0, remaining: -1, limit: DAILY_LIMIT });
         return;
@@ -349,7 +349,7 @@ const PlantAssistant: React.FC<PlantAssistantProps> = ({ variant = 'compact', on
             .order('created_at');
           if (msgs) {
             setMessages(
-              msgs.map((m: any) => ({
+              msgs.map((m: unknown) => ({
                 id: m.id,
                 role: m.role,
                 content: m.content,
@@ -387,14 +387,14 @@ const PlantAssistant: React.FC<PlantAssistantProps> = ({ variant = 'compact', on
   }, [conversationId, user]);
 
   const buildLiveSnapshot = useCallback(() => {
-    const tagToSnap = (t: any) => ({
+    const tagToSnap = (t: unknown) => ({
       id: t.id, label: t.label, value: Number((t.value ?? 0).toFixed(2)),
       unit: t.unit, section: t.section, status: t.status,
     });
     return {
-      intake: intakeTags.filter((t: any) => t.isActive).map(tagToSnap),
-      oht: ohtTags.filter((t: any) => t.isActive).map(tagToSnap),
-      wtp: wtpTags.filter((t: any) => t.isActive).map(tagToSnap),
+      intake: intakeTags.filter((t: unknown) => t.isActive).map(tagToSnap),
+      oht: ohtTags.filter((t: unknown) => t.isActive).map(tagToSnap),
+      wtp: wtpTags.filter((t: unknown) => t.isActive).map(tagToSnap),
       timestamp: new Date().toISOString(),
     };
   }, [intakeTags, ohtTags, wtpTags]);
@@ -555,7 +555,7 @@ const PlantAssistant: React.FC<PlantAssistantProps> = ({ variant = 'compact', on
         // aborted before any content — drop the empty placeholder
         setMessages((prev) => prev.filter((m) => m.id !== assistantId));
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (e?.name === 'AbortError') {
         // User stopped — keep partial text if any, otherwise drop placeholder
         const partial = assistantText.trim();
@@ -599,7 +599,7 @@ const PlantAssistant: React.FC<PlantAssistantProps> = ({ variant = 'compact', on
     rec.lang = looksHindi(input) ? 'hi-IN' : 'en-IN';
     rec.interimResults = true;
     rec.continuous = false;
-    rec.onresult = (ev: any) => {
+    rec.onresult = (ev: unknown) => {
       let transcript = '';
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
         transcript += ev.results[i][0].transcript;
@@ -607,7 +607,7 @@ const PlantAssistant: React.FC<PlantAssistantProps> = ({ variant = 'compact', on
       setInput(transcript);
     };
     rec.onend = () => setIsListening(false);
-    rec.onerror = (e: any) => {
+    rec.onerror = (e: unknown) => {
       console.error('voice err', e);
       setIsListening(false);
       if (e.error === 'not-allowed') toast.error('Microphone permission denied');
@@ -922,7 +922,7 @@ const PlantAssistant: React.FC<PlantAssistantProps> = ({ variant = 'compact', on
                     <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-headings:my-2 prose-table:my-2 [&>*]:text-current break-words">
                       <ReactMarkdown
                         components={{
-                          code: ({ inline, className, children, ...props }: any) => {
+                          code: ({ inline, className, children, ...props }: unknown) => {
                             const text = String(children ?? '');
                             if (inline) {
                               // Highlight numeric values & tag IDs distinctly

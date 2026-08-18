@@ -14,6 +14,7 @@ import WtpLevelTank from './instruments/WtpLevelTank';
 import TotalizerDisplay from './instruments/TotalizerDisplay';
 import IntakePump from './instruments/IntakePump';
 import WtpPump from './instruments/WtpPump';
+import TemperatureDisplay from './instruments/TemperatureDisplay';
 import AlarmSettingsModal, { AlarmSettings } from './AlarmSettingsModal';
 import SensorTrendModal from './SensorTrendModal';
 import { Button } from '@/components/ui/button';
@@ -72,10 +73,14 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
     }
     
     switch (sensor.instrumentType) {
-      case 'pt':
+      case 'pt': {
         const isPt5 = tag.id === 'WTP-PT5';
         const ptSize = isPt5 ? 160 : 130;
         return <PtGauge value={tag.value} min={tag.min} max={tag.max} unit={tag.unit} label={tag.label} size={ptSize} variant={isPt5 ? 'cwph' : 'default'} />;
+      }
+      case 'combined_pt':
+        // Combined Header Pressure — amber/orange, bigger gauge
+        return <PtGauge value={tag.value} min={tag.min} max={tag.max} unit={tag.unit} label={tag.label} size={175} variant="combined" />;
       case 'lt':
         if (section === 'oht') {
           return <OhtLevelTank value={tag.value} min={tag.min} max={tag.max} unit={tag.unit} />;
@@ -109,6 +114,8 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
           return <WtpPump isOn={tag.value > 0.5} label={sensor.label} size={100} />;
         }
         return <IntakePump isOn={tag.value > 0.5} label={sensor.label} size={100} />;
+      case 'temperature':
+        return <TemperatureDisplay value={tag.value} unit={tag.unit} min={tag.min} max={tag.max} />;
       case 'ph':
         return <PhAnalyzer value={tag.value} unit={tag.unit} />;
       case 'turbidity':
@@ -161,8 +168,24 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
     }
   };
 
+  const isPump = sensor.instrumentType === 'pump';
+
   const getHealthBadge = () => {
-    // 3-state badge so operators can tell ON, OFF, and ZERO instantly.
+    // For pumps: binary ON / OFF driven by PT readings, never show 'ZERO'
+    if (isPump) {
+      const isRunning = tag.value > 0.5;
+      return (
+        <span className={`text-[8px] sm:text-[9px] font-bold px-1.5 py-0.5 rounded-md tracking-wider ${
+          isRunning 
+            ? 'bg-success/15 text-success border border-success/30' 
+            : 'bg-destructive/15 text-destructive border border-destructive/30'
+        }`}>
+          {isRunning ? 'ON' : 'OFF'}
+        </span>
+      );
+    }
+
+    // 3-state badge for analog sensors: ON, ZERO, OFF
     let label: string;
     let className: string;
     if (connection === 'connected') {
@@ -183,15 +206,24 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
   };
 
   const ConnIcon: React.FC<{ className?: string }> = ({ className }) => {
+    if (isPump) {
+      const isRunning = tag.value > 0.5;
+      return (
+        <div className={`w-2 h-2 rounded-full shrink-0 ${isRunning ? 'bg-success pulse-live' : 'bg-destructive/70'}`} />
+      );
+    }
     if (connection === 'connected') return <Wifi className={`${className} text-success`} />;
     if (connection === 'inactive') return <CircleSlash className={`${className} text-sky-500`} />;
     return <WifiOff className={`${className} text-destructive animate-pulse`} />;
   };
 
   if (isDigital) {
+    const isPumpRunning = isPump && tag.value > 0.5;
     return (
       <div
-        className={`premium-card rounded-xl p-3 sm:p-4 relative overflow-visible opacity-0 animate-fade-in flex flex-col h-full ${connection === 'no-data' ? 'border-destructive/50' : ''} ${connection === 'inactive' ? 'border-sky-500/30' : ''}`}
+        className={`premium-card rounded-xl p-3 sm:p-4 relative overflow-visible opacity-0 animate-fade-in flex flex-col h-full ${
+          !isPump && connection === 'no-data' ? 'border-destructive/50' : ''
+        } ${!isPump && connection === 'inactive' ? 'border-sky-500/30' : ''}`}
         style={{ animationDelay: `${index * 40}ms` }}
       >
         <div className="relative z-10 flex flex-col flex-1">
@@ -206,7 +238,9 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
             {renderInstrument()}
           </div>
           <div className="flex items-center gap-1 mt-1">
-            {connection === 'connected' && <div className="w-1.5 h-1.5 rounded-full bg-success pulse-live shrink-0" />}
+            {(isPump ? isPumpRunning : connection === 'connected') && (
+              <div className="w-1.5 h-1.5 rounded-full bg-success pulse-live shrink-0" />
+            )}
             <span className="text-[9px] sm:text-[10px] text-muted-foreground font-mono truncate">{tag.timestamp.toLocaleTimeString()}</span>
           </div>
         </div>

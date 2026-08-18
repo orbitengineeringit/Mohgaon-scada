@@ -25,6 +25,7 @@ export type Database = {
           label: string | null
           message: string | null
           section: string | null
+          source: string | null
           tag_config_id: string | null
           tag_id: string
           unit: string | null
@@ -40,6 +41,7 @@ export type Database = {
           label?: string | null
           message?: string | null
           section?: string | null
+          source?: string | null
           tag_config_id?: string | null
           tag_id: string
           unit?: string | null
@@ -55,6 +57,7 @@ export type Database = {
           label?: string | null
           message?: string | null
           section?: string | null
+          source?: string | null
           tag_config_id?: string | null
           tag_id?: string
           unit?: string | null
@@ -387,6 +390,7 @@ export type Database = {
           oht_topic: string | null
           oht_topic_2: string | null
           oht_topic_3: string | null
+          oht_topic_4: string | null
           updated_at: string
           wtp_topic: string | null
         }
@@ -402,6 +406,7 @@ export type Database = {
           oht_topic?: string | null
           oht_topic_2?: string | null
           oht_topic_3?: string | null
+          oht_topic_4?: string | null
           updated_at?: string
           wtp_topic?: string | null
         }
@@ -417,6 +422,7 @@ export type Database = {
           oht_topic?: string | null
           oht_topic_2?: string | null
           oht_topic_3?: string | null
+          oht_topic_4?: string | null
           updated_at?: string
           wtp_topic?: string | null
         }

@@ -7,11 +7,12 @@ interface PtGaugeProps {
   unit: string;
   label: string;
   size?: number;
-  variant?: 'default' | 'cwph';
+  variant?: 'default' | 'cwph' | 'combined';
 }
 
 const PtGauge: React.FC<PtGaugeProps> = ({ value, min, max, unit, label, size = 140, variant = 'default' }) => {
   const isCwph = variant === 'cwph';
+  const isCombined = variant === 'combined';
   const percentage = useMemo(() => {
     return Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100));
   }, [value, min, max]);
@@ -21,10 +22,18 @@ const PtGauge: React.FC<PtGaugeProps> = ({ value, min, max, unit, label, size = 
   }, [percentage]);
 
   const getColor = () => {
+    if (isCombined) {
+      if (percentage > 85) return 'hsl(var(--destructive))';
+      if (percentage > 65) return 'hsl(38,92%,65%)';
+      return 'hsl(38,92%,50%)'; // amber — Combined Header Pressure
+    }
     if (percentage > 85) return 'hsl(var(--destructive))';
     if (percentage > 65) return 'hsl(var(--warning))';
     return isCwph ? 'hsl(var(--primary))' : 'hsl(var(--success))';
   };
+
+  const arcStroke = isCombined ? 9 : isCwph ? 8 : 6;
+  const activeStroke = isCombined ? 10 : isCwph ? 9 : 7;
 
   const r = size / 2 - 8;
   const cx = size / 2;
@@ -60,13 +69,13 @@ const PtGauge: React.FC<PtGaugeProps> = ({ value, min, max, unit, label, size = 
         </defs>
 
         {/* Background arc */}
-        <path d={createArc(-135, 135)} fill="none" stroke={isCwph ? 'hsl(var(--muted))' : 'hsl(var(--border))'} strokeWidth={isCwph ? 8 : 6} strokeLinecap="round" />
+        <path d={createArc(-135, 135)} fill="none" stroke={isCombined ? 'hsl(38,92%,20%)' : isCwph ? 'hsl(var(--muted))' : 'hsl(var(--border))'} strokeWidth={arcStroke} strokeLinecap="round" />
         {/* Safe zone */}
-        <path d={createArc(-135, -135 + 270 * 0.65)} fill="none" stroke={isCwph ? 'hsl(var(--primary) / 0.35)' : 'hsl(var(--success) / 0.3)'} strokeWidth={isCwph ? 8 : 6} strokeLinecap="round" />
+        <path d={createArc(-135, -135 + 270 * 0.65)} fill="none" stroke={isCombined ? 'hsl(38,92%,35%)' : isCwph ? 'hsl(var(--primary) / 0.35)' : 'hsl(var(--success) / 0.3)'} strokeWidth={arcStroke} strokeLinecap="round" />
         {/* Warning zone */}
-        <path d={createArc(-135 + 270 * 0.65, -135 + 270 * 0.85)} fill="none" stroke="hsl(var(--warning) / 0.4)" strokeWidth={isCwph ? 8 : 6} strokeLinecap="round" />
+        <path d={createArc(-135 + 270 * 0.65, -135 + 270 * 0.85)} fill="none" stroke="hsl(var(--warning) / 0.4)" strokeWidth={arcStroke} strokeLinecap="round" />
         {/* Danger zone */}
-        <path d={createArc(-135 + 270 * 0.85, 135)} fill="none" stroke="hsl(var(--destructive) / 0.4)" strokeWidth={isCwph ? 8 : 6} strokeLinecap="round" />
+        <path d={createArc(-135 + 270 * 0.85, 135)} fill="none" stroke="hsl(var(--destructive) / 0.4)" strokeWidth={arcStroke} strokeLinecap="round" />
 
         {/* Active value arc - only show when percentage is meaningful */}
         {showActiveArc && (
@@ -74,7 +83,7 @@ const PtGauge: React.FC<PtGaugeProps> = ({ value, min, max, unit, label, size = 
             d={createArc(-135, -135 + 270 * (percentage / 100))}
             fill="none"
             stroke={getColor()}
-            strokeWidth={isCwph ? 9 : 7}
+            strokeWidth={activeStroke}
             strokeLinecap="round"
             filter={`url(#${glowId})`}
           />
@@ -149,10 +158,10 @@ const PtGauge: React.FC<PtGaugeProps> = ({ value, min, max, unit, label, size = 
         )}
 
         {/* Value text */}
-        <text x={cx} y={cy + (isCwph ? 42 : 32)} textAnchor="middle" className="fill-foreground font-mono font-bold" style={{ fontSize: isCwph ? '16px' : '12px' }}>
+        <text x={cx} y={cy + (isCombined ? 44 : isCwph ? 42 : 32)} textAnchor="middle" className="fill-foreground font-mono font-bold" style={{ fontSize: isCombined ? '18px' : isCwph ? '16px' : '12px', fill: isCombined ? getColor() : undefined }}>
           {value.toFixed(2)}
         </text>
-        <text x={cx} y={cy + (isCwph ? 56 : 44)} textAnchor="middle" className="fill-muted-foreground" style={{ fontSize: isCwph ? '10px' : '8px' }}>
+        <text x={cx} y={cy + (isCombined ? 60 : isCwph ? 56 : 44)} textAnchor="middle" className="fill-muted-foreground" style={{ fontSize: isCombined ? '11px' : isCwph ? '10px' : '8px' }}>
           {unit}
         </text>
       </svg>

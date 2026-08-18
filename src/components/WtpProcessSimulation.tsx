@@ -544,9 +544,12 @@ const WtpProcessSimulation: React.FC = () => {
   const flowOutVal = findTag('WTP-Flow-OUT')?.value ?? 0;
   const ltBwVal = findTag('WTP-LT-BW')?.value ?? 0;
   const ltCwVal = findTag('WTP-LT-CW')?.value ?? 0;
+  const phInVal = findTag('WTP-PH-IN')?.value ?? 0;
+  const taInVal = findTag('WTP-TA-IN')?.value ?? 0;
   const phOutVal = findTag('WTP-PH')?.value ?? 0;
   const clOutVal = findTag('WTP-CL')?.value ?? 0;
   const taOutVal = findTag('WTP-TA')?.value ?? 0;
+  const totInVal = findTag('WTP-Totalizer-IN')?.value ?? 0;
   const totVal = findTag('WTP-Totalizer-OUT')?.value ?? 0;
   const kwTag = undefined; // WTP-KW not installed
   const kwVal = 0;
@@ -554,19 +557,21 @@ const WtpProcessSimulation: React.FC = () => {
 
   const pt1Val = findTag('WTP-PT1')?.value ?? 0;
   const pt2Val = findTag('WTP-PT2')?.value ?? 0;
+  const headerPtVal = findTag('WTP-HeaderPT')?.value ?? 0; // PT_3 = Combined Header Pressure
 
   const pump1On = pt1Val > 1.5;
   const pump2On = pt2Val > 1.5;
   const anyPumpOn = pump1On || pump2On;
 
-  const combinedPtValFromTag = findTag('WTP-CombinedPT1')?.value ?? 0;
+  // Combined header pressure: use direct PLC reading (PT_3/WTP-HeaderPT) if available,
+  // otherwise derive from individual pump PT readings
   const combinedPt = useMemo(() => {
-    if (combinedPtValFromTag > 0.05) return combinedPtValFromTag;
+    if (headerPtVal > 0.05) return headerPtVal;
     if (pump1On && pump2On) return (pt1Val + pt2Val) / 2;
     if (pump1On) return pt1Val;
     if (pump2On) return pt2Val;
     return 0;
-  }, [combinedPtValFromTag, pump1On, pump2On, pt1Val, pt2Val]);
+  }, [headerPtVal, pump1On, pump2On, pt1Val, pt2Val]);
 
   // Cross-logic
   const waterFlowing = flowInVal > 0.1;
@@ -639,7 +644,7 @@ const WtpProcessSimulation: React.FC = () => {
 
   // Totalizer
   const totalizerX = outletEfmX;
-  const totalizerY = mergeY + 160;
+  const totalizerY = mergeY + 105;
 
   // Ground
   const groundY = 1490;
@@ -759,7 +764,7 @@ const WtpProcessSimulation: React.FC = () => {
         tags={wtpTags}
         sensorIds={[
           'WTP-Flow-IN','WTP-Flow-OUT','WTP-LT-BW','WTP-LT-CW','WTP-PH-IN','WTP-TA-IN','WTP-PH','WTP-CL','WTP-TA',
-          'WTP-Totalizer-IN','WTP-Totalizer-OUT','WTP-PT1','WTP-PT2','WTP-CombinedPT1','WTP-PT5'
+          'WTP-Totalizer-IN','WTP-Totalizer-OUT','WTP-PT1','WTP-PT2','WTP-HeaderPT','WTP-TEM'
         ]}
       />
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
@@ -852,6 +857,35 @@ const WtpProcessSimulation: React.FC = () => {
                 <text x={efmInX} y={inletPipeY + 58} textAnchor="middle" fontSize="20" fontWeight="900" fill="hsl(var(--foreground))" fontFamily="ui-monospace">
                   {flowInVal.toFixed(1)} <tspan fontSize="11" fill="hsl(var(--muted-foreground))" fontWeight="600">m³/h</tspan>
                 </text>
+
+                {/* ═══ INLET TOTALIZER ═══ */}
+                {(() => {
+                  const tx = efmInX, ty = inletPipeY + 105;
+                  const digits = Math.floor(totInVal).toString().padStart(8, '0').split('');
+                  const dec = (totInVal % 1).toFixed(2).substring(2);
+                  const dW = 15, dH = 24, gp = 2;
+                  const totW = 10 * dW + 9 * gp + 4 + 20;
+                  return (
+                    <g>
+                      <text x={tx} y={ty - 10} textAnchor="middle" fontSize="13" fontWeight="800" fill="hsl(var(--foreground))">Totalizer (Inlet)</text>
+                      <rect x={tx - totW / 2} y={ty} width={totW} height={dH + 16} rx={5} fill="hsl(var(--secondary) / 0.5)" stroke="hsl(var(--border) / 0.5)" strokeWidth="1" />
+                      {digits.map((d, i) => (
+                        <g key={`in-td${i}`}>
+                          <rect x={tx - totW / 2 + 10 + i * (dW + gp)} y={ty + 8} width={dW} height={dH} rx={3} fill="hsl(var(--card))" stroke="hsl(var(--border))" strokeWidth="1" />
+                          <text x={tx - totW / 2 + 10 + i * (dW + gp) + dW / 2} y={ty + 8 + dH / 2 + 5} textAnchor="middle" fill="hsl(var(--foreground))" style={{ fontSize: '14px', fontFamily: 'ui-monospace, monospace', fontWeight: 800 }}>{d}</text>
+                        </g>
+                      ))}
+                      <circle cx={tx - totW / 2 + 10 + 8 * (dW + gp) + 1} cy={ty + 8 + dH - 2} r={2.5} fill="hsl(var(--primary))" />
+                      {dec.split('').map((d, i) => (
+                        <g key={`in-dd${i}`}>
+                          <rect x={tx - totW / 2 + 10 + 8 * (dW + gp) + 4 + gp + i * (dW + gp)} y={ty + 8} width={dW} height={dH} rx={3} fill="hsl(var(--destructive) / 0.12)" stroke="hsl(var(--destructive) / 0.25)" strokeWidth="1" />
+                          <text x={tx - totW / 2 + 10 + 8 * (dW + gp) + 4 + gp + i * (dW + gp) + dW / 2} y={ty + 8 + dH / 2 + 5} textAnchor="middle" fill="hsl(var(--destructive))" style={{ fontSize: '14px', fontFamily: 'ui-monospace, monospace', fontWeight: 800 }}>{d}</text>
+                        </g>
+                      ))}
+                      <text x={tx} y={ty + dH + 28} textAnchor="middle" fontSize="10" fontWeight="700" fill="hsl(var(--muted-foreground))">m³</text>
+                    </g>
+                  );
+                })()}
               </g>
             );
           })()}
@@ -1336,8 +1370,110 @@ const WtpProcessSimulation: React.FC = () => {
           {/* CWR label rendered later (after pipes) to prevent overlap */}
           {drawLevelBar(cwrX + cwrW + 18, cwrY, 34, cwrH, ltCwVal, "LT-CW", "#0ea5e9")}
 
+          {/* ═══ OUTLET TEMPERATURE SENSOR (Classic Glass Thermometer) ═══ */}
+          {(() => {
+            const temVal = findTag('WTP-TEM')?.value ?? 0;
+            const pct = Math.max(0, Math.min(100, (temVal / 60) * 100));
+            const temColor = pct > 80 ? '#ef4444' : pct > 60 ? '#f97316' : pct > 30 ? '#22c55e' : '#38bdf8';
+            
+            // Shifted well to the right (x = cwrX + cwrW + 155) so LT-CW 50% line is completely clear
+            const tX = cwrX + cwrW + 155;
+            const tY = cwrY + 10;
+            const stemW = 14;
+            const stemH = 100;
+            const bulbR = 17;
+            const stemX = tX - stemW / 2;
+            const stemY = tY + 20;
+            const bulbCy = stemY + stemH + bulbR - 2;
+            const fillH = (pct / 100) * stemH;
+            const fillY = stemY + stemH - fillH;
+
+            return (
+              <g>
+                <defs>
+                  <linearGradient id="wtp-therm-grad" x1="0" y1="1" x2="0" y2="0">
+                    <stop offset="0%" stopColor={temColor} />
+                    <stop offset="100%" stopColor={temColor} stopOpacity="0.8" />
+                  </linearGradient>
+                  <clipPath id="wtp-therm-stem-clip">
+                    <rect x={stemX + 1} y={stemY} width={stemW - 2} height={stemH} rx={4} />
+                  </clipPath>
+                </defs>
+
+                {/* Sensor Title Label */}
+                <text x={tX} y={tY + 4} textAnchor="middle" fontSize="13" fontWeight="800" fill="hsl(var(--foreground))">
+                  CWR TEMP
+                </text>
+
+                {/* Stem Outer Glass Body / Background Track */}
+                <rect x={stemX} y={stemY} width={stemW} height={stemH} rx={stemW / 2}
+                  fill="hsl(var(--card))" stroke="hsl(var(--border))" strokeWidth="1.5" />
+
+                {/* Scale Tick Marks on Right */}
+                {[0, 20, 40, 60].map((temp) => {
+                  const p = temp / 60;
+                  const tickY = stemY + stemH - p * stemH;
+                  return (
+                    <g key={temp}>
+                      <line x1={stemX + stemW + 3} y1={tickY} x2={stemX + stemW + 10} y2={tickY}
+                        stroke="hsl(var(--muted-foreground))" strokeWidth="1.5" />
+                      <text x={stemX + stemW + 14} y={tickY + 3.5} textAnchor="start"
+                        fill="hsl(var(--muted-foreground))"
+                        style={{ fontSize: "9px", fontFamily: "ui-monospace, monospace", fontWeight: 700 }}>
+                        {temp}
+                      </text>
+                    </g>
+                  );
+                })}
+
+                {/* Minor Ticks */}
+                {[10, 30, 50].map((temp) => {
+                  const p = temp / 60;
+                  const tickY = stemY + stemH - p * stemH;
+                  return (
+                    <line key={temp} x1={stemX + stemW + 3} y1={tickY} x2={stemX + stemW + 7} y2={tickY}
+                      stroke="hsl(var(--muted-foreground))" strokeWidth="1" opacity="0.6" />
+                  );
+                })}
+
+                {/* Mercury Liquid Stem Fill */}
+                <g clipPath="url(#wtp-therm-stem-clip)">
+                  <rect x={stemX + 1} y={fillY} width={stemW - 2} height={fillH + bulbR}
+                    rx={3} fill="url(#wtp-therm-grad)" opacity="0.95">
+                    <animate attributeName="opacity" values="0.88;0.98;0.88" dur="2.5s" repeatCount="indefinite" />
+                  </rect>
+                </g>
+
+                {/* Stem Glass Outline */}
+                <rect x={stemX} y={stemY} width={stemW} height={stemH} rx={stemW / 2}
+                  fill="none" stroke="hsl(var(--border))" strokeWidth="1.5" />
+
+                {/* Bulb at Bottom */}
+                <circle cx={tX} cy={bulbCy} r={bulbR}
+                  fill={temColor} opacity="0.95" />
+                <circle cx={tX} cy={bulbCy} r={bulbR}
+                  fill="none" stroke="hsl(var(--border))" strokeWidth="2" />
+                {/* Bulb Glass Highlight */}
+                <circle cx={tX - 4} cy={bulbCy - 4} r={4} fill="white" opacity="0.4" />
+
+                {/* Digital Readout Box */}
+                <rect x={tX - 36} y={bulbCy + bulbR + 8} width={72} height={36} rx={6}
+                  fill="hsl(var(--card))" stroke="hsl(var(--border))" strokeWidth="1.5" />
+                <text x={tX} y={bulbCy + bulbR + 26} textAnchor="middle"
+                  className="font-mono" style={{ fontSize: "16px", fontWeight: 800, fill: temColor }}>
+                  {temVal.toFixed(1)}
+                  <tspan fontSize="11" fill="hsl(var(--muted-foreground))" fontWeight={600}> °C</tspan>
+                </text>
+                <text x={tX} y={bulbCy + bulbR + 38} textAnchor="middle"
+                  fontSize="8" fontWeight={800} fill="hsl(var(--muted-foreground))" letterSpacing="0.8px">
+                  OUTLET
+                </text>
+              </g>
+            );
+          })()}
 
         </g>
+
 
 
         {/* ═══ COMBINED PRESSURE GAUGES ABOVE Headers ═══ */}
@@ -1409,9 +1545,9 @@ const WtpProcessSimulation: React.FC = () => {
 
         {/* ═══ CWR LABEL ═══ */}
         <g>
-          <text x={cwrX + cwrW / 2 + 6} y={cwrY + cwrH + 18} textAnchor="middle" fontSize="12" fontWeight="800" fill="hsl(var(--foreground))">
-            <tspan x={cwrX + cwrW / 2 + 6} dy="0">CLEAR WATER</tspan>
-            <tspan x={cwrX + cwrW / 2 + 6} dy="16">RESERVOIR</tspan>
+          <text x={cwrX + cwrW / 2 + 20} y={cwrY + cwrH + 18} textAnchor="middle" fontSize="12" fontWeight="800" fill="hsl(var(--foreground))">
+            <tspan x={cwrX + cwrW / 2 + 20} dy="0">CLEAR WATER</tspan>
+            <tspan x={cwrX + cwrW / 2 + 20} dy="16">RESERVOIR</tspan>
           </text>
         </g>
 
@@ -1467,9 +1603,9 @@ const WtpProcessSimulation: React.FC = () => {
                 {/* Flange sticks up slightly above the thick pipe */}
                 <rect x={efmX - nW / 2 - 5} y={mergeY - 17} width={nW + 10} height={7} rx={2} fill={pVDark} />
 
-                <rect x={efmX - 80} y={mergeY + 35} width={160} height={44} rx={8} fill="hsl(38 92% 50% / 0.06)" stroke="hsl(38 92% 50% / 0.4)" strokeWidth="1" />
-                <text x={efmX} y={mergeY + 50} textAnchor="middle" fontSize="11" fontWeight="700" fill="hsl(38 92% 55%)" letterSpacing="0.8px">FLOW RATE</text>
-                <text x={efmX} y={mergeY + 69} textAnchor="middle" fontSize="20" fontWeight="900" fill="hsl(var(--foreground))" fontFamily="ui-monospace">
+                <rect x={efmX - 80} y={mergeY + 24} width={160} height={44} rx={8} fill="hsl(38 92% 50% / 0.06)" stroke="hsl(38 92% 50% / 0.4)" strokeWidth="1" />
+                <text x={efmX} y={mergeY + 39} textAnchor="middle" fontSize="11" fontWeight="700" fill="hsl(38 92% 55%)" letterSpacing="0.8px">FLOW RATE</text>
+                <text x={efmX} y={mergeY + 58} textAnchor="middle" fontSize="20" fontWeight="900" fill="hsl(var(--foreground))" fontFamily="ui-monospace">
                   {flowOutVal.toFixed(1)} <tspan fontSize="11" fill="hsl(var(--muted-foreground))" fontWeight="600">m³/h</tspan>
                 </text>
               </g>
@@ -1509,7 +1645,7 @@ const WtpProcessSimulation: React.FC = () => {
             const totW = 10 * dW + 9 * gp + 4 + 20;
             return (
               <g>
-                <text x={tx} y={ty - 10} textAnchor="middle" fontSize="13" fontWeight="800" fill="hsl(var(--foreground))">Totalizer</text>
+                <text x={tx} y={ty - 10} textAnchor="middle" fontSize="13" fontWeight="800" fill="hsl(var(--foreground))">Totalizer (Outlet)</text>
                 <rect x={tx - totW / 2} y={ty} width={totW} height={dH + 16} rx={5} fill="hsl(var(--secondary) / 0.5)" stroke="hsl(var(--border) / 0.5)" strokeWidth="1" />
                 {digits.map((d, i) => (
                   <g key={`td${i}`}>
@@ -1551,13 +1687,14 @@ const WtpProcessSimulation: React.FC = () => {
         {/* ═══ STAGE LABELS ═══ */}
         <g>
           {[
-            { sx: 80, sy: processY + mixerH + 78, text: 'STAGE 1: RAW WATER', color: 'hsl(var(--primary))' },
+            { sx: efmInX, sy: inletPipeY + 185, text: 'STAGE 1: RAW WATER', color: 'hsl(var(--primary))' },
             { sx: mixerX + mixerW / 2, sy: processY + mixerH + 78, text: 'STAGE 2: MIXING', color: 'hsl(280 65% 55%)' },
             { sx: flocX + flocW / 2, sy: processY + flocH + 122, text: 'STAGE 3: CLARIFLOCCULATION', color: 'hsl(35 90% 50%)' },
             { sx: settleX + settleW / 2, sy: processY + settleH + 105, text: 'STAGE 4: SEDIMENTATION', color: 'hsl(38 70% 45%)' },
             { sx: filterX + filterW / 2, sy: processY + filterH + 65, text: 'STAGE 5: FILTRATION', color: 'hsl(200 70% 45%)' },
-            { sx: outletEfmX, sy: mergeY + 101, text: 'STAGE 6: STORAGE', color: 'hsl(199 89% 48%)' },
-            { sx: (pump1X + pump2X) / 2 + pumpW / 2, sy: pumpRowY + pumpH + 42, text: 'STAGE 7: PUMPING', color: 'hsl(var(--warning))' },
+            { sx: cwrX + cwrW / 2 + 20, sy: cwrY + cwrH + 56, text: 'STAGE 6: STORAGE', color: 'hsl(199 89% 48%)' },
+            { sx: (pump1X + pump2X) / 2 + pumpW / 2, sy: pumpRowY + pumpH + 6, text: 'STAGE 7: PUMPING', color: 'hsl(var(--warning))' },
+            { sx: totalizerX, sy: mergeY + 185, text: 'STAGE 8: DISTRIBUTION', color: 'hsl(142 71% 45%)' },
           ].map((stage, i) => {
             const boxWidth = stage.text.length * 6 + 36;
             return (

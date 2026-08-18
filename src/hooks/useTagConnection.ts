@@ -20,15 +20,19 @@ export const getTagConnection = (tag?: TagData | null): ConnectionState => {
     const elapsed = Date.now() - new Date(tag.lastDataTime).getTime();
     
     // Dynamic disconnect timeout based on section:
-    // Intake = 8s, OHT = 25s, WTP = 35s
-    const timeout = tag.section === 'intake' ? 8000 : tag.section === 'oht' ? 25000 : 35000;
+    // ~18-20s measured RTU interval — use 4× safety margin
+    // WTP: 80s, Intake: 80s, OHT: 90s
+    const timeout = tag.section === 'intake' ? 80000 : tag.section === 'oht' ? 90000 : 80000;
     
     if (elapsed > timeout) return 'no-data';
   } else {
     return 'no-data';
   }
   
-  // Active state logic: if value is exactly 0, show ZERO, else ON
+  // When live telemetry is arriving within timeout, determine active state:
+  // - Pumps: value=0 means pump is OFF (normal operation) — show 'connected' so pump card handles ON/OFF display
+  // - All other sensors: value=0 while connected = ZERO reading — show 'inactive' (blue ZERO badge)
+  if (tag.instrumentType === 'pump') return 'connected';
   return tag.value === 0 ? 'inactive' : 'connected';
 };
 

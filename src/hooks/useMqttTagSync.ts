@@ -23,7 +23,11 @@ interface TagUpdate {
 const DISCONNECT_TIMEOUT_MS = 3000;
 const ABNORMAL_DELTA_PCT = 0.12;        // 12% of sensor range
 const FLUSH_INTERVAL_MS = 30 * 1000;    // batch-write queue to DB every 30s
-const SNAPSHOT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+// NOTE: Periodic 5-minute snapshots are handled exclusively by the server-side
+// pg_cron → scada-ingest Edge Function. Browser-side periodic snapshots were
+// removed to fix irregular save intervals caused by browser timer throttling
+// in background tabs. Only event-driven writes (alarm, abnormal, state_change)
+// are sent from the browser.
 
 const isAbnormalReading = (sensor: MohgaonSensor, value: number): boolean => {
   switch (sensor.instrumentType) {
@@ -59,8 +63,7 @@ export const useMqttTagSync = (
 ) => {
   const pendingLogs = useRef<TagUpdate[]>([]);
   const flushInterval = useRef<NodeJS.Timeout | null>(null);
-  const snapshotInterval = useRef<NodeJS.Timeout | null>(null);
-  const lastSnapshotTime = useRef<number>(0);
+
   const disconnectCheckInterval = useRef<NodeJS.Timeout | null>(null);
   const { addAlarm } = useAlarm();
   const tagConfigCache = useRef<Map<string, string>>(new Map());
@@ -137,13 +140,14 @@ export const useMqttTagSync = (
       const nowTime = now.getTime();
       
       // Check for Central Gateway Offline isolation (TDM Layer 2)
+      // Grace period = 120s (4× RTU interval) to avoid false alerts from network jitter
       const intakeLast = lastMessageTime.current.get('intake') || 0;
       const wtpLast = lastMessageTime.current.get('wtp') || 0;
       const ohtLast = lastMessageTime.current.get('oht') || 0;
 
-      const isGatewayOffline = (intakeLast > 0 && nowTime - intakeLast > 65000) &&
-                               (wtpLast > 0 && nowTime - wtpLast > 65000) &&
-                               (ohtLast > 0 && nowTime - ohtLast > 65000);
+      const isGatewayOffline = (intakeLast > 0 && nowTime - intakeLast > 120000) &&
+                               (wtpLast > 0 && nowTime - wtpLast > 120000) &&
+                               (ohtLast > 0 && nowTime - ohtLast > 120000);
 
       if (isGatewayOffline) {
         const gwKey = 'SCADA-Gateway-Offline';
@@ -179,12 +183,15 @@ export const useMqttTagSync = (
       // Clear gateway offline once network is restored
       alarmActiveSince.current.delete('SCADA-Gateway-Offline');
 
-      // Individual watchdog timeouts with 3-packet GSM grace timeouts (TDM Layer 2)
+      // Individual watchdog timeouts calibrated for ~30s RTU telemetry interval
+      // Grace margins: 2.5× RTU interval for WTP/Intake, 3× for OHT (longer GSM round-trip)
+      // This prevents false-disconnect alarms from normal network jitter.
       const checkTags = (setter: React.Dispatch<React.SetStateAction<TagData[]>>) => {
         setter(prev => prev.map(tag => {
           if (tag.source === 'mqtt' && tag.lastDataTime) {
             const elapsed = nowTime - tag.lastDataTime.getTime();
-            const timeout = tag.section === 'intake' ? 15000 : tag.section === 'wtp' ? 45000 : 60000;
+            // WTP & Intake: 75s (2.5× 30s interval), OHT: 90s (3× 30s interval)
+            const timeout = tag.section === 'wtp' ? 75000 : tag.section === 'intake' ? 75000 : 90000;
             if (elapsed > timeout && tag.status !== 'disconnected') {
               const msg = `Communication Loss: ${tag.label} (${tag.id}) is offline (No cellular GPRS data for ${Math.round(elapsed / 1000)}s)`;
               addAlarm({
@@ -238,42 +245,64 @@ export const useMqttTagSync = (
     } catch (error) { logError('TagSync.refreshCache', error); }
   }, []);
 
-  const takeSnapshot = useCallback(() => {
+  const SNAPSHOT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+  const lastSavedBucketRef = useRef<number>(Math.floor(Date.now() / (5 * 60 * 1000)));
+
+  const checkWallClockSnapshot = useCallback(() => {
     const now = Date.now();
-    const alignedTs = new Date(Math.floor(now / SNAPSHOT_INTERVAL_MS) * SNAPSHOT_INTERVAL_MS).toISOString();
-    const { intakeTags: currentIntake, ohtTags: currentOht, wtpTags: currentWtp } = tagsRef.current;
-    const allTags = [
-      ...currentIntake.map(t => ({ tag: t, section: 'intake' as const })),
-      ...currentWtp.map(t => ({ tag: t, section: 'wtp' as const })),
-      ...currentOht.map(t => ({ tag: t, section: 'oht' as const })),
-    ];
-    for (const { tag, section } of allTags) {
-      if (tag.status === 'connected' || tag.isActive) {
-        pendingLogs.current.push({
-          tagId: tag.id,
-          value: tag.value,
-          section,
-          topic: tag.mqttTopic || '',
-          reason: 'interval',
-          alignedTimestamp: alignedTs,
-        });
+    const currentBucket = Math.floor(now / SNAPSHOT_INTERVAL_MS);
+    if (currentBucket > lastSavedBucketRef.current) {
+      const alignedTs = new Date(currentBucket * SNAPSHOT_INTERVAL_MS).toISOString();
+      const { intakeTags: currentIntake, ohtTags: currentOht, wtpTags: currentWtp } = tagsRef.current;
+      
+      const UNINSTALLED = new Set(['WTP-Pump3', 'WTP-Pump4', 'WTP-PT3', 'WTP-PT4', 'WTP-CombinedPT1', 'WTP-CombinedPT2', 'WTP-KW', 'INT-KW']);
+      
+      const getSectionOrder = (section: string, tagId: string): number => {
+        if (section === 'intake') return 0;
+        if (section === 'wtp') return 1;
+        if (section === 'oht') {
+          const m = tagId.match(/^OHT[-_\s]*([0-9]+)/i);
+          return 1 + (m ? parseInt(m[1], 10) : 99);
+        }
+        return 99;
+      };
+
+      const allTags = [
+        ...currentIntake.map(t => ({ tag: t, section: 'intake' as const })),
+        ...currentWtp.map(t => ({ tag: t, section: 'wtp' as const })),
+        ...currentOht.map(t => ({ tag: t, section: 'oht' as const })),
+      ]
+      .filter(item => !UNINSTALLED.has(item.tag.id))
+      .sort((a, b) => {
+        const oa = getSectionOrder(a.section, a.tag.id);
+        const ob = getSectionOrder(b.section, b.tag.id);
+        if (oa !== ob) return oa - ob;
+        return a.tag.id.localeCompare(b.tag.id);
+      });
+
+      let addedCount = 0;
+      for (const { tag, section } of allTags) {
+        if (tag.status === 'connected' || tag.isActive || tag.value !== 0) {
+          pendingLogs.current.push({
+            tagId: tag.id,
+            value: tag.value,
+            section,
+            topic: tag.mqttTopic || '',
+            reason: 'interval',
+            alignedTimestamp: alignedTs,
+          });
+          addedCount++;
+        }
+      }
+      if (addedCount > 0) {
+        lastSavedBucketRef.current = currentBucket;
       }
     }
-    lastSnapshotTime.current = now;
   }, []);
 
   const startBatchWriter = useCallback(() => {
     if (flushInterval.current) return () => {};
     refreshTagConfigCache();
-
-    const now = Date.now();
-    if (now - lastSnapshotTime.current >= SNAPSHOT_INTERVAL_MS) {
-      takeSnapshot();
-    }
-
-    snapshotInterval.current = setInterval(() => {
-      takeSnapshot();
-    }, SNAPSHOT_INTERVAL_MS);
 
     flushInterval.current = setInterval(async () => {
       if (pendingLogs.current.length === 0) return;
@@ -303,9 +332,8 @@ export const useMqttTagSync = (
 
     return () => {
       if (flushInterval.current) { clearInterval(flushInterval.current); flushInterval.current = null; }
-      if (snapshotInterval.current) { clearInterval(snapshotInterval.current); snapshotInterval.current = null; }
     };
-  }, [ensureTagConfigExists, refreshTagConfigCache, takeSnapshot]);
+  }, [ensureTagConfigExists, refreshTagConfigCache, checkWallClockSnapshot]);
 
   const processMqttMessage = useCallback(async (message: MqttMessage) => {
     const { payload, section, subsection, topic } = message;
@@ -347,10 +375,52 @@ export const useMqttTagSync = (
       const value = typeof rawValue === 'string' ? parseFloat(rawValue) : rawValue;
       
       const sensor = sensors.find(s => 
+        // Exact match (canonical mqttKey = real PLC tag name after sensor config fix)
         s.mqttKey === mqttKey ||
         s.mqttKey.toUpperCase() === mqttKey.toUpperCase() ||
-        (mqttKey.toUpperCase() === 'PT' && (s.mqttKey === 'PT_01' || s.mqttKey === 'PT')) ||
-        (mqttKey.toUpperCase() === 'PT_01' && (s.mqttKey === 'PT_01' || s.mqttKey === 'PT'))
+        // --- Legacy alias fallbacks (backward compatibility for older firmware or manual tests) ---
+        // PT_1/PT_2 → HT Pump pressure sensors
+        (mqttKey === 'PT_1' && s.id === 'WTP-PT1') ||
+        (mqttKey === 'PT_2' && s.id === 'WTP-PT2') ||
+        (mqttKey === 'CWR_PT1' && s.id === 'WTP-PT1') ||
+        (mqttKey === 'CWR_PT2' && s.id === 'WTP-PT2') ||
+        // PT_3 = Combined Header Pressure (NOT a VT pump — canonical PLC tag per site specification)
+        (mqttKey === 'PT_3' && s.id === 'WTP-HeaderPT') ||
+        // Inlet flow / totalizer aliases
+        (mqttKey === 'FLOWMETER' && s.id === 'WTP-Flow-IN') ||
+        (mqttKey === 'RAW_EFM_FLOW' && s.id === 'WTP-Flow-IN') ||
+        (mqttKey === 'TOTALIZER' && s.id === 'WTP-Totalizer-IN') ||
+        (mqttKey === 'RAW_EFM' && s.id === 'WTP-Totalizer-IN') ||
+        // Outlet flow / totalizer aliases
+        (mqttKey === 'CLR_EFM_FLOW' && s.id === 'WTP-Flow-OUT') ||
+        (mqttKey === 'CWR_FLOW' && s.id === 'WTP-Flow-OUT') ||
+        (mqttKey === 'FLOW_OUT' && s.id === 'WTP-Flow-OUT') ||
+        (mqttKey === 'CLR_EFM' && s.id === 'WTP-Totalizer-OUT') ||
+        (mqttKey === 'CWR_TOT' && s.id === 'WTP-Totalizer-OUT') ||
+        (mqttKey === 'TOTALIZER_OUT' && s.id === 'WTP-Totalizer-OUT') ||
+        // Inlet analyzer aliases
+        (mqttKey === 'RW_TB' && s.id === 'WTP-TA-IN') ||
+        (mqttKey === 'RAW_TR' && s.id === 'WTP-TA-IN') ||
+        (mqttKey === 'RW_PH' && s.id === 'WTP-PH-IN') ||
+        (mqttKey === 'RAW_PH' && s.id === 'WTP-PH-IN') ||
+        // Outlet analyzer aliases
+        (mqttKey === 'CWR_TB' && s.id === 'WTP-TA') ||
+        (mqttKey === 'CWR_TR' && s.id === 'WTP-TA') ||
+        (mqttKey === 'CWR_TEM' && s.id === 'WTP-TEM') ||
+        // General section-aware fallbacks
+        (mqttKey === 'LEVEL' && (s.instrumentType === 'lt' || s.mqttKey.endsWith('_LT'))) ||
+        (mqttKey === 'FLOW' && (s.instrumentType === 'flow' || s.mqttKey.endsWith('_FLOW') || s.mqttKey === 'RAW_EFM_FLOW')) ||
+        (mqttKey === 'TOTALIZER' && (s.instrumentType === 'totalizer' || s.mqttKey.endsWith('_TOT') || s.mqttKey === 'RAW_EFM')) ||
+        (mqttKey === 'PT_01' && (s.mqttKey.endsWith('_PT1') || s.mqttKey === 'PT_01' || s.mqttKey === 'PT_1')) ||
+        (mqttKey === 'PT_02' && (s.mqttKey.endsWith('_PT2') || s.mqttKey === 'PT_02' || s.mqttKey === 'PT_2')) ||
+        (mqttKey === 'PT_03' && (s.mqttKey.endsWith('_PT3') || s.mqttKey === 'PT_03')) ||
+        (mqttKey === 'CWR_LEVEL' && s.mqttKey === 'CWR_LT') ||
+        (mqttKey === 'BW_LEVEL' && s.mqttKey === 'BW_LT') ||
+        (mqttKey === 'PH' && s.mqttKey === 'CWR_PH') ||
+        (mqttKey === 'CL' && s.mqttKey === 'CWR_CL') ||
+        (mqttKey === 'TR' && s.mqttKey === 'CWR_TB') ||
+        (mqttKey === 'FLOW_OUT' && s.mqttKey === 'CLR_EFM_FLOW') ||
+        (mqttKey === 'TOTALIZER_OUT' && s.mqttKey === 'CLR_EFM')
       );
       if (!sensor) continue;
 
@@ -358,13 +428,21 @@ export const useMqttTagSync = (
       const existingTag = tags.find(t => t.id === sensorId);
 
       // --- MLTCV Layer 1: Raw Signal Validation (NaN/Overflow Checks) ---
-      const isNaNOrInfinite = value === null || value === undefined || isNaN(value) || !Number.isFinite(value);
-      const isNegativeOverflow = !isNaNOrInfinite && (value < sensor.min - Math.max(1.0, sensor.max * 0.1));
+      // Unit conversion: RTU sends RAW_EFM_FLOW and CLR_EFM_FLOW in L/hr
+      // SCADA displays in m³/hr → divide by 1000
+      let processedValue = value;
+      if ((mqttKey === 'RAW_EFM_FLOW' || mqttKey === 'CLR_EFM_FLOW') && sensor.unit === 'm³/hr') {
+        processedValue = value / 1000;
+      }
+      const validatedValue = processedValue;
+
+      const isNaNOrInfinite = validatedValue === null || validatedValue === undefined || isNaN(validatedValue) || !Number.isFinite(validatedValue);
+      const isNegativeOverflow = !isNaNOrInfinite && (validatedValue < sensor.min - Math.max(1.0, sensor.max * 0.1));
       const isPositiveOverflow = !isNaNOrInfinite && (
-        value > sensor.max * 2.0 || 
-        value === 32767 || 
-        value === 65535 || 
-        value > 1e10
+        validatedValue > sensor.max * 2.0 || 
+        validatedValue === 32767 || 
+        validatedValue === 65535 || 
+        validatedValue > 1e10
       );
       const isCorrupt = isNaNOrInfinite || isNegativeOverflow || isPositiveOverflow;
 
@@ -395,12 +473,12 @@ export const useMqttTagSync = (
 
       // --- MLTCV Layer 1: Rate-of-Change (ROC) Sensor Limiter ---
       const prevVal = existingTag ? existingTag.value : null;
-      let rawValueAdjusted = value;
+      let rawValueAdjusted = validatedValue;
       if (prevVal !== null && existingTag.status === 'connected') {
-        const delta = Math.abs(value - prevVal);
+        const delta = Math.abs(validatedValue - prevVal);
         if (sensor.instrumentType === 'pt' || sensor.instrumentType === 'combined_pt') {
           if (delta > 3.0) { // Clamping instantaneous spikes > 3.0 Bar
-            rawValueAdjusted = value > prevVal ? prevVal + 0.5 : prevVal - 0.5;
+            rawValueAdjusted = validatedValue > prevVal ? prevVal + 0.5 : prevVal - 0.5;
             const noiseKey = `${sensorId}-ROCNoise`;
             const noiseStart = alarmActiveSince.current.get(noiseKey);
             if (!noiseStart) {
@@ -419,7 +497,7 @@ export const useMqttTagSync = (
           const isMetres = sensor.unit === 'm';
           const threshold = isMetres ? 1.5 : 20.0;
           if (delta > threshold) { // Clamping level spikes > 1.5m or > 20%
-            rawValueAdjusted = value > prevVal ? prevVal + (isMetres ? 0.14 : 2.0) : prevVal - (isMetres ? 0.14 : 2.0);
+            rawValueAdjusted = validatedValue > prevVal ? prevVal + (isMetres ? 0.14 : 2.0) : prevVal - (isMetres ? 0.14 : 2.0);
             const noiseKey = `${sensorId}-ROCNoise`;
             const noiseStart = alarmActiveSince.current.get(noiseKey);
             if (!noiseStart) {
@@ -439,7 +517,7 @@ export const useMqttTagSync = (
 
       // --- MLTCV Layer 1: Numeric Precision (Rounding) ---
       let roundedValue = rawValueAdjusted;
-      if (sensor.instrumentType === 'pt' || sensor.instrumentType === 'combined_pt' || sensor.instrumentType === 'lt' || sensor.instrumentType === 'ph' || sensor.instrumentType === 'chlorine') {
+      if (sensor.instrumentType === 'pt' || sensor.instrumentType === 'combined_pt' || sensor.instrumentType === 'lt' || sensor.instrumentType === 'ph' || sensor.instrumentType === 'chlorine' || sensor.instrumentType === 'temperature') {
         roundedValue = Math.round(rawValueAdjusted * 100) / 100;
       } else if (sensor.instrumentType === 'flow' || sensor.instrumentType === 'kw' || sensor.instrumentType === 'turbidity') {
         roundedValue = Math.round(rawValueAdjusted * 10) / 10;
@@ -571,63 +649,8 @@ export const useMqttTagSync = (
         }
       }
 
-      // --- DSMC Rules ---
+      // --- Pump State Derivation (Strictly driven by Pressure Transmitter: PT > 1.5 Bar = ON, <= 1.5 Bar = OFF) ---
       let pumpValue = sensor.instrumentType === 'pt' ? (displayValue > 1.5 ? 1 : 0) : null;
-      
-      if (sensor.instrumentType === 'pt' && pumpValue === 0) {
-        // DSMC Rule 1: Flow-based status correction
-        let isFlowActive = false;
-        if (section === 'intake') {
-          const intakeFlow = latestValues.get('INT-Flow') || 0;
-          const wtpFlowIn = latestValues.get('WTP-Flow-IN') || 0;
-          isFlowActive = intakeFlow > 10.0 || wtpFlowIn > 10.0;
-        } else if (section === 'wtp') {
-          const wtpFlowIn = latestValues.get('WTP-Flow-IN') || 0;
-          const intakeFlow = latestValues.get('INT-Flow') || 0;
-          isFlowActive = wtpFlowIn > 10.0 || intakeFlow > 10.0;
-        }
-
-        if (isFlowActive) {
-          const otherPtId = sensorId === 'INT-PT1' ? 'INT-PT2' : 
-                             sensorId === 'INT-PT2' ? 'INT-PT1' : 
-                             sensorId === 'WTP-PT1' ? 'WTP-PT2' : 
-                             sensorId === 'WTP-PT2' ? 'WTP-PT1' : null;
-          const otherPtVal = otherPtId ? (latestValues.get(otherPtId) || 0) : 0;
-          
-          if (otherPtVal <= 1.5) {
-            pumpValue = 1; // Force ON
-            const pumpId = PT_TO_PUMP_MAP[sensorId];
-            if (pumpId) {
-              const corrKey = `${pumpId}-StatusCorrection`;
-              const corrStart = alarmActiveSince.current.get(corrKey);
-              if (!corrStart) {
-                alarmActiveSince.current.set(corrKey, nowTime);
-                const msg = `Status Correction: ${pumpId} display status forced to ON (Flow is active, but pump pressure reads ${displayValue.toFixed(2)} Bar)`;
-                addAlarm({
-                  tagId: pumpId, tagConfigId: existingTag?.dbId, label: pumpId,
-                  value: 1, unit: '', type: 'High', message: msg,
-                  section: section as 'intake' | 'wtp',
-                });
-              }
-            }
-          }
-        }
-      }
-
-      // DSMC Rule 2: Power-based status correction
-      if (sensor.instrumentType === 'pt' && pumpValue === 1 && section === 'wtp') {
-        const kwTag = tags.find(t => t.id === 'WTP-KW');
-        const kwVal = latestValues.get('WTP-KW') || 0;
-        const isKwHealthy = kwTag && kwTag.status === 'connected' && !kwTag.notInstalled;
-        if (isKwHealthy && kwVal < 2.0) {
-          pumpValue = 0; // Force OFF
-          const pumpId = PT_TO_PUMP_MAP[sensorId];
-          if (pumpId) {
-            alarmActiveSince.current.delete(`${pumpId}-DryRun`);
-            alarmActiveSince.current.delete(`${pumpId}-Efficiency`);
-          }
-        }
-      }
 
       // --- Pump Motor Short Cycling Watchdog (MCC Rule 2) ---
       const pumpId = PT_TO_PUMP_MAP[sensorId];
@@ -659,7 +682,7 @@ export const useMqttTagSync = (
         }
       }
 
-      // Update local state atomically
+      // Update local state atomically for live UI rendering
       setter(prev => {
         return prev.map(t => {
           if (t.id === sensorId) {
@@ -677,34 +700,6 @@ export const useMqttTagSync = (
           return t;
         });
       });
-
-      // Smart save decision
-      const key = `${section}-${sensorId}`;
-      const nowSave = Date.now();
-      const prev = lastSaved.current.get(key);
-      const abnormalNow = isAbnormalReading(sensor, displayValue);
-      const range = Math.max(1e-6, (sensor.max ?? 1) - (sensor.min ?? 0));
-      const deltaPct = prev && prev.value !== null ? Math.abs(displayValue - prev.value) / range : 1;
-
-      let reason: TagUpdate['reason'] | null = null;
-      if (sensor.type !== 'analog' && prev && displayValue !== prev.value) {
-        reason = 'state_change';
-      } else if (abnormalNow && (!prev || !prev.inAlarm)) {
-        reason = 'alarm';
-      } else if (prev && deltaPct >= ABNORMAL_DELTA_PCT) {
-        reason = 'abnormal';
-      }
-
-      if (reason) {
-        pendingLogs.current.push({
-          tagId: sensorId, value: displayValue,
-          section: section as 'oht' | 'intake' | 'wtp',
-          topic, reason,
-        });
-        lastSaved.current.set(key, { value: displayValue, at: nowSave, inAlarm: abnormalNow });
-      } else if (!prev) {
-        lastSaved.current.set(key, { value: displayValue, at: nowSave, inAlarm: abnormalNow });
-      }
     }
 
     // ==========================================

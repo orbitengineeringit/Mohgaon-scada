@@ -105,9 +105,18 @@ export interface OhtProcessSimulationProps {
 }
 
 const OhtProcessSimulation: React.FC<OhtProcessSimulationProps> = ({ sensors, tags, config }) => {
-  const { setOhtTags } = useScada();
-  const getTag = (mqttKey: string) => tags.find(t => t.id === sensors.find(s => s.mqttKey === mqttKey)?.id);
-  const getSensor = (mqttKey: string) => sensors.find(s => s.mqttKey === mqttKey);
+  const getSensor = (key: string) => sensors.find(s => 
+    s.mqttKey === key || 
+    s.mqttKey.endsWith(`_${key}`) || 
+    s.instrumentType === key.toLowerCase() || 
+    (key === 'PT_01' && s.instrumentType === 'pt') ||
+    (key === 'FLOW' && s.instrumentType === 'flow') ||
+    (key === 'LEVEL' && s.instrumentType === 'lt')
+  );
+  const getTag = (key: string) => {
+    const sensor = getSensor(key);
+    return tags.find(t => t.id === sensor?.id);
+  };
 
   const ltTag = getTag('LEVEL');
   const ltVal = ltTag?.value || 0;

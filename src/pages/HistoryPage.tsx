@@ -54,6 +54,10 @@ const INTERVAL_LABEL: Record<ExportInterval, string> = {
   '1d': 'Every 1 day',
 };
 
+// Sensors not installed at Mohgaon plant (e.g. Mohgaon WTP only has 2 HT Pumps: WTP-Pump1 & WTP-Pump2)
+const UNINSTALLED_TAG_IDS = ['WTP-Pump3', 'WTP-Pump4', 'WTP-PT3', 'WTP-PT4', 'WTP-CombinedPT1', 'WTP-CombinedPT2', 'WTP-KW', 'INT-KW'];
+const UNINSTALLED_TAGS_FILTER = `("${UNINSTALLED_TAG_IDS.join('","')}")`;
+
 /** Derive a sub-section label like OHT-1 / OHT-2 / OHT-3 from a tag_id (e.g. "OHT1-LT"). */
 const getDisplaySection = (section: string, tagId: string): string => {
   const sec = section.toLowerCase();
@@ -198,6 +202,14 @@ const EnergyMeterSvg = ({ className = "h-4.5 w-4.5" }: { className?: string }) =
   </svg>
 );
 
+const ThermometerSvg = ({ className = "h-4.5 w-4.5" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M14 14.76V3.5C14 2.67 13.33 2 12.5 2C11.67 2 11 2.67 11 3.5V14.76C9.78 15.6 9 17 9 18.5C9 20.43 10.57 22 12.5 22C14.43 22 16 20.43 16 18.5C16 17 15.22 15.6 14 14.76Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+    <circle cx="12.5" cy="18.5" r="2" fill="#f43f5e" />
+    <path d="M12.5 9V16.5" stroke="#f43f5e" strokeWidth="1.5" strokeLinecap="round" />
+  </svg>
+);
+
 const getSectionIcon = (section: string) => {
   switch (section.toLowerCase()) {
     case 'intake':
@@ -227,6 +239,9 @@ const getSensorIcon = (tagId: string, label: string) => {
   }
   if (normalized.includes('ph')) {
     return <PhAnalyzerSvg className="h-4.5 w-4.5 text-teal-500 dark:text-teal-400" />;
+  }
+  if (normalized.includes('temp') || normalized.includes('-tem') || normalized.includes('°c')) {
+    return <ThermometerSvg className="h-4.5 w-4.5 text-rose-500 dark:text-rose-400" />;
   }
   if (normalized.includes('kw') || normalized.includes('energy') || normalized.includes('power')) {
     return <EnergyMeterSvg className="h-4.5 w-4.5 text-amber-500 dark:text-amber-400" />;
@@ -323,9 +338,11 @@ const HistoryPage: React.FC = () => {
       const sectionFilters = getSectionFilters();
       const ohtPrefixes = getOhtTagPrefixes();
 
-      // Run count and data queries in parallel
+      // Run count and data queries in parallel (excluding uninstalled sensors & ad-hoc delta noise)
       let countQuery = supabase.from('historian_logs').select('*', { count: 'exact', head: true })
-        .gte('timestamp', startTime).lte('timestamp', endTime);
+        .gte('timestamp', startTime).lte('timestamp', endTime)
+        .not('tag_id', 'in', UNINSTALLED_TAGS_FILTER)
+        .or('source.like.%5min%,source.is.null');
       if (sectionFilters.length > 0) countQuery = countQuery.in('section', sectionFilters);
       // Apply specific OHT tag filtering
       if (ohtPrefixes.length > 0 && sectionFilters.includes('oht') && !globalFilters.assets.includes('intake') && !globalFilters.assets.includes('wtp')) {
@@ -337,6 +354,8 @@ const HistoryPage: React.FC = () => {
       let dataQuery = supabase.from('historian_logs')
         .select(`id, tag_id, section, value, timestamp, tag_config:tag_config_id (label, unit)`)
         .gte('timestamp', startTime).lte('timestamp', endTime)
+        .not('tag_id', 'in', UNINSTALLED_TAGS_FILTER)
+        .or('source.like.%5min%,source.is.null')
         .order('timestamp', { ascending: false })
         .order('section', { ascending: true })
         .order('tag_id', { ascending: true })
@@ -363,7 +382,19 @@ const HistoryPage: React.FC = () => {
         if (oa !== ob) return oa - ob;
         return a.tag_id.localeCompare(b.tag_id);
       });
-      setLogs(sorted);
+
+      // Deduplicate: Ensure exactly 1 entry per tag_id per 5-minute snapshot bucket
+      const seenTagBucket = new Set<string>();
+      const BUCKET_MS = 5 * 60 * 1000;
+      const deduplicated = sorted.filter(log => {
+        const bucketTs = Math.floor(new Date(log.timestamp).getTime() / BUCKET_MS);
+        const key = `${bucketTs}_${log.tag_id}`;
+        if (seenTagBucket.has(key)) return false;
+        seenTagBucket.add(key);
+        return true;
+      });
+
+      setLogs(deduplicated);
       setCurrentPage(page);
       if (page === 1) toast({ title: 'Data Loaded', description: `Found ${countResult.count || 0} total records.` });
     } catch (error: any) {
@@ -400,7 +431,9 @@ const HistoryPage: React.FC = () => {
       const ohtOr = useOhtFilter ? ohtPrefixes.map(p => `tag_id.like.${p}%`).join(',') : null;
 
       const applyFilters = (q: any) => {
-        let r = q.gte('timestamp', startTime).lte('timestamp', endTime);
+        let r = q.gte('timestamp', startTime).lte('timestamp', endTime)
+          .not('tag_id', 'in', UNINSTALLED_TAGS_FILTER)
+          .or('source.like.%5min%,source.is.null');
         if (sectionFilters.length > 0) r = r.in('section', sectionFilters);
         if (ohtOr) r = r.or(ohtOr);
         return r;
@@ -843,6 +876,9 @@ const HistoryPage: React.FC = () => {
                           } else if (normalizedLabel.includes('ph')) {
                             iconBorderClass = "bg-teal-500/10 border-teal-500/20 dark:bg-teal-950/30 dark:border-teal-500/30 shadow-sm shadow-teal-500/5 group-hover:shadow-teal-500/20 group-hover:border-teal-500/50";
                             hoverColorClass = "group-hover:text-teal-500 dark:group-hover:text-teal-400";
+                          } else if (normalizedLabel.includes('temp') || normalizedLabel.includes('-tem') || normalizedLabel.includes('°c')) {
+                            iconBorderClass = "bg-rose-500/10 border-rose-500/20 dark:bg-rose-950/30 dark:border-rose-500/30 shadow-sm shadow-rose-500/5 group-hover:shadow-rose-500/20 group-hover:border-rose-500/50";
+                            hoverColorClass = "group-hover:text-rose-500 dark:group-hover:text-rose-400";
                           } else if (normalizedLabel.includes('kw') || normalizedLabel.includes('energy') || normalizedLabel.includes('power')) {
                             iconBorderClass = "bg-amber-500/10 border-amber-500/20 dark:bg-amber-950/30 dark:border-amber-500/30 shadow-sm shadow-amber-500/5 group-hover:shadow-amber-500/20 group-hover:border-amber-500/50";
                             hoverColorClass = "group-hover:text-amber-500 dark:group-hover:text-amber-400";
@@ -937,6 +973,8 @@ const HistoryPage: React.FC = () => {
                                       ? "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20 shadow-cyan-500/5"
                                       : normalizedLabel.includes('ph')
                                       ? "bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/20 shadow-teal-500/5"
+                                      : normalizedLabel.includes('temp') || normalizedLabel.includes('-tem') || normalizedLabel.includes('°c')
+                                      ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20 shadow-rose-500/5"
                                       : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 shadow-amber-500/5"
                                   )}>
                                     {Number(log.value).toFixed(2)}

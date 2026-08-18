@@ -29,6 +29,7 @@ const WtpCombinedPtCard: React.FC<{
   const findTag = (id: string) => tags.find((t: any) => t.id === id);
   const pt1Val = findTag(pt1Id)?.value ?? 0;
   const pt2Val = findTag(pt2Id)?.value ?? 0;
+  // HT Pump ON threshold: PT > 1.5 Bar = pump running
   const pump1Running = pt1Val > 1.5;
   const pump2Running = pt2Val > 1.5;
 
@@ -113,7 +114,7 @@ const WtpPage: React.FC = () => {
 
   const ltIds = useMemo(() => WTP_SENSORS.filter(s => s.instrumentType === 'lt' && !s.notInstalled).map(s => s.id), []);
   const flowIds = useMemo(() => WTP_SENSORS.filter(s => s.instrumentType === 'flow' && !s.notInstalled).map(s => s.id), []);
-  const inletAnalyzerIds = useMemo(() => WTP_SENSORS.filter(s => s.subsection === 'inlet' && !s.notInstalled).map(s => s.id), []);
+  const inletAnalyzerIds = useMemo(() => WTP_SENSORS.filter(s => (s.subsection === 'raw-water' || s.subsection === 'inlet') && !s.notInstalled).map(s => s.id), []);
   const outletAnalyzerIds = useMemo(() => WTP_SENSORS.filter(s => s.subsection === 'outlet' && !s.notInstalled).map(s => s.id), []);
   const pumpIds = useMemo(() => WTP_SENSORS.filter(s => s.instrumentType === 'pump' && !s.notInstalled).map(s => s.id), []);
   const ptIds = useMemo(() => WTP_SENSORS.filter(s => s.instrumentType === 'pt' && !s.notInstalled).map(s => s.id), []);
@@ -220,18 +221,26 @@ const WtpPage: React.FC = () => {
           </h3>
           {/* Row 1: Active Pumps with their individual PTs */}
           <div className={`grid gap-4 sm:gap-6 w-full ${pumpPtPairs.length <= 2 ? 'grid-cols-1 sm:grid-cols-2 max-w-4xl' : 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-4'}`}>
-            {pumpPtPairs.map(({ pumpId, ptId }) => {
+          {pumpPtPairs.map(({ pumpId, ptId }) => {
               const pumpSensor = sensorMap[pumpId];
               const pumpTag = findTag(pumpId);
               const ptSensor = sensorMap[ptId];
               const ptTag = findTag(ptId);
+              const isPumpOn = ptTag ? ptTag.value > 1.5 : false;
               return (
                 <div key={pumpId} className="flex flex-col gap-3">
                   {pumpSensor && pumpTag && (
                     <InstrumentCard tag={pumpTag} sensor={pumpSensor} section="wtp" index={idx++} pumpComponent="wtp" />
                   )}
                   {ptSensor && ptTag && (
-                    <InstrumentCard tag={ptTag} sensor={ptSensor} section="wtp" index={idx++} />
+                    <div className="relative">
+                      <InstrumentCard tag={ptTag} sensor={ptSensor} section="wtp" index={idx++} />
+                      {/* Pump status overlay badge on PT card */}
+                      <div className={`absolute bottom-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold tracking-wider border ${isPumpOn ? 'bg-success/15 text-success border-success/30' : 'bg-destructive/10 text-destructive border-destructive/25 animate-pulse'}`}>
+                        <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isPumpOn ? 'bg-success pulse-live' : 'bg-destructive'}`} />
+                        {isPumpOn ? 'PUMP ON' : 'PUMP OFF'}
+                      </div>
+                    </div>
                   )}
                 </div>
               );
@@ -264,7 +273,7 @@ const WtpPage: React.FC = () => {
   const rawWaterIds = useMemo(() => WTP_SENSORS.filter(s => s.subsection === 'raw-water' && !s.notInstalled).map(s => s.id), []);
   const backwashIds = useMemo(() => ['WTP-LT-BW'].filter(id => !sensorMap[id]?.notInstalled), [sensorMap]);
   const clearWaterIds = useMemo(() => [
-    'WTP-LT-CW', 'WTP-Pump1', 'WTP-Pump2', 'WTP-PT1', 'WTP-PT2', 'WTP-CombinedPT1',
+    'WTP-LT-CW', 'WTP-Pump1', 'WTP-Pump2', 'WTP-PT1', 'WTP-PT2', 'WTP-HeaderPT', 'WTP-CombinedPT1',
   ].filter(id => !sensorMap[id]?.notInstalled), [sensorMap]);
   const outletIds = useMemo(() => WTP_SENSORS.filter(s => s.subsection === 'outlet' && !s.notInstalled).map(s => s.id), []);
 

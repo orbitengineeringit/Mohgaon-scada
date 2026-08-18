@@ -39,11 +39,12 @@ interface MqttContextType {
 }
 
 const getDefaultBrokerUrl = () => {
-  if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_MQTT_BROKER_URL) {
-    return import.meta.env.VITE_MQTT_BROKER_URL;
-  }
+  let url = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_MQTT_BROKER_URL) || 'ws://mqtt.orbitengineerings.com:8080';
   const isSecure = typeof window !== 'undefined' && window.location.protocol === 'https:';
-  return isSecure ? 'wss://mqtt.orbitengineerings.com:8080' : 'ws://mqtt.orbitengineerings.com:8080';
+  if (isSecure && url.startsWith('ws://')) {
+    url = url.replace('ws://', 'wss://');
+  }
+  return url;
 };
 
 const defaultUsername = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_MQTT_USERNAME) || 'orbit';

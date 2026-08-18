@@ -425,15 +425,23 @@ Deno.serve(async (req: Request) => {
         mqtt_topic: topic,
       }));
 
-    if (logs.length > 0) {
-      console.log(`Inserting ${logs.length} historian records at aligned timestamp ${alignedTs}`);
-      console.log(`Order: ${logs.map(l => `${l.section}/${l.tag_id}`).join(', ')}`);
-    }
+    // Prevent database bloat: only write to historian_logs once per 5-minute window
+    const { data: existingBucket } = await supabase
+      .from("historian_logs")
+      .select("id")
+      .eq("timestamp", alignedTs)
+      .limit(1)
+      .maybeSingle();
 
-    const { error: insertErr } = logs.length > 0
-      ? await supabase.from("historian_logs").insert(logs)
-      : { error: null } as any;
-    if (insertErr) throw new Error(`historian insert failed: ${insertErr.message}`);
+    const shouldSaveToDb = !existingBucket;
+
+    if (shouldSaveToDb && logs.length > 0) {
+      console.log(`Inserting ${logs.length} historian records for 5-min snapshot at ${alignedTs}`);
+      const { error: insertErr } = await supabase.from("historian_logs").insert(logs);
+      if (insertErr) console.error(`historian insert failed: ${insertErr.message}`);
+    } else {
+      console.log(`Live sync: Bucket ${alignedTs} already saved. Returning live telemetry in-memory.`);
+    }
 
     // Backend Alarm Detection & Debounce (bulk query)
     const alarmsToInsert: any[] = [];
@@ -498,11 +506,21 @@ Deno.serve(async (req: Request) => {
     });
     if (rpcErr) console.warn("Consumption refresh failed:", rpcErr.message);
 
+    const latestTelemetry: Record<string, { value: number; timestamp: string; section: string }> = {};
+    for (const entry of Array.from(byTag.values())) {
+      latestTelemetry[entry.sensor.id] = {
+        value: entry.value,
+        timestamp: entry.at,
+        section: entry.sensor.section,
+      };
+    }
+
     return new Response(JSON.stringify({
       success: true,
       saved_count: logs.length,
       received_topics: Array.from(new Set(messages.map(m => m.topic))).length,
       duration_ms: Date.now() - started,
+      telemetry: latestTelemetry,
     }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (err) {
     console.error("scada-ingest failed", err);

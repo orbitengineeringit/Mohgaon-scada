@@ -46,6 +46,25 @@ const queryClient = new QueryClient({
   },
 });
 
+import { useCloudTelemetrySync } from "@/hooks/useCloudTelemetrySync";
+import { useMqtt } from "@/contexts/MqttContext";
+
+/** Cloud sync fallback worker when direct MQTT is unavailable */
+const CloudSyncWorker = () => {
+  const { intakeTags, ohtTags, wtpTags, setIntakeTags, setOhtTags, setWtpTags } = useScada();
+  const { isConnected } = useMqtt();
+  useCloudTelemetrySync({
+    intakeTags,
+    ohtTags,
+    wtpTags,
+    setIntakeTags,
+    setOhtTags,
+    setWtpTags,
+    isMqttConnected: isConnected,
+  });
+  return null;
+};
+
 /** Bridge component connecting MQTT messages to SCADA state */
 const MqttScadaBridge: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { intakeTags, ohtTags, wtpTags, setIntakeTags, setOhtTags, setWtpTags, setMqttEnabled } = useScada();
@@ -65,6 +84,7 @@ const MqttScadaBridge: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
   return (
     <MqttProvider onMessage={handleMqttMessage}>
+      <CloudSyncWorker />
       {children}
     </MqttProvider>
   );

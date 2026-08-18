@@ -300,11 +300,12 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
     }
 
     try {
+      const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
       const options: IClientOptions = {
         clientId: config.clientId || `mohgaon_${Math.random().toString(16).substr(2, 8)}`,
         clean: true,
-        connectTimeout: 10000,
-        reconnectPeriod: 3000, // Native self-healing reconnect every 3s
+        connectTimeout: 8000,
+        reconnectPeriod: isHttps ? 20000 : 3000, // On HTTPS if broker SSL is missing, gracefully retry every 20s
         keepalive: 30, // Send ping every 30s to keep broker connection alive
       };
       if (config.username) { options.username = config.username; options.password = config.password; }

@@ -21,6 +21,7 @@ const StatusBar = memo(forwardRef<HTMLDivElement>((_, ref) => {
   const activeCount = getActiveTagCount();
   const totalCount = useMemo(() => intakeTags.length + ohtTags.length + wtpTags.length, [intakeTags.length, ohtTags.length, wtpTags.length]);
 
+  const showConnecting = isConnecting;
   const isOnline = isConnected || activeCount > 0;
 
   return (

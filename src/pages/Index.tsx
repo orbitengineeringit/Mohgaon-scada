@@ -20,11 +20,11 @@ const Index = () => {
     );
   }
 
-  // installedTags: exclude sensors marked notInstalled:true (e.g. WTP-KW, WTP-Pump3/4, WTP-PT3/4)
-  const installedTags = (tags: typeof intakeTags) => tags.filter(t => t.isActive && !t.notInstalled);
+  // installedTags: active telemetry data sensors (excludes notInstalled and derived pumps)
+  const installedTags = (tags: typeof intakeTags) => tags.filter(t => !t.notInstalled && t.instrumentType !== 'pump');
 
   const getDataActiveCount = (tags: typeof intakeTags) => {
-    return installedTags(tags).filter(t => t.value !== 0 || (t.lastDataTime && t.lastDataTime.getTime() > 0)).length;
+    return installedTags(tags).filter(t => t.status === 'connected').length;
   };
 
   const totalSensors = installedTags(intakeTags).length + installedTags(ohtTags).length + installedTags(wtpTags).length;

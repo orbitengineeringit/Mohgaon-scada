@@ -36,9 +36,9 @@ const createOhtSensors = (ohtNum: number): MohgaonSensor[] => {
   return [
     { id: `${prefix}-PT`, mqttKey: `${prefix}_PT`, label: 'Pressure (PT)', unit: 'Bar', min: 0, max: 10, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'pt' },
     { id: `${prefix}-LT`, mqttKey: `${prefix}_LT`, label: 'Level (LT)', unit: '%', min: 0, max: 100, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'lt' },
-    { id: `${prefix}-Flow-IN`, mqttKey: `${prefix}_FLOW`, label: 'Flow Meter (Inlet)', unit: 'm³/hr', min: 0, max: 50, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'flow' },
-    { id: `${prefix}-Flow-OUT`, mqttKey: `${prefix}_FLOW_OUT`, label: 'Flow Meter (Outlet)', unit: 'm³/hr', min: 0, max: 50, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'flow' },
-    { id: `${prefix}-FCV`, mqttKey: `${prefix}_FCV`, label: 'Flow Control Valve', unit: '%', min: 0, max: 100, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'fcv' },
+    { id: `${prefix}-Flow-IN`, mqttKey: `${prefix}_FLOW`, label: 'Flow Meter', unit: 'm³/hr', min: 0, max: 50, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'flow' },
+    { id: `${prefix}-Flow-OUT`, mqttKey: `${prefix}_FLOW_OUT`, label: 'Flow Meter (Outlet)', unit: 'm³/hr', min: 0, max: 50, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'flow', notInstalled: true },
+    { id: `${prefix}-FCV`, mqttKey: `${prefix}_FCV`, label: 'Flow Control Valve', unit: '%', min: 0, max: 100, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'fcv', notInstalled: true },
     { id: `${prefix}-Totalizer`, mqttKey: `${prefix}_TOT`, label: 'Totalizer', unit: 'm³', min: 0, max: 999999, section: 'oht', subsection: sub, type: 'totalizer', instrumentType: 'totalizer' },
   ];
 };

@@ -220,7 +220,7 @@ export const ScadaProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   }, []);
 
   const getActiveTagCount = useCallback(() => {
-    return [...intakeTags, ...ohtTags, ...wtpTags].filter(t => t.isActive).length;
+    return [...intakeTags, ...ohtTags, ...wtpTags].filter(t => !t.notInstalled && t.instrumentType !== 'pump' && t.status === 'connected').length;
   }, [intakeTags, ohtTags, wtpTags]);
 
   return (

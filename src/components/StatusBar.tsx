@@ -18,8 +18,9 @@ const StatusBar = memo(forwardRef<HTMLDivElement>((_, ref) => {
     return () => clearInterval(timer);
   }, []);
 
-  const activeCount = getActiveTagCount();
-  const totalCount = useMemo(() => intakeTags.length + ohtTags.length + wtpTags.length, [intakeTags.length, ohtTags.length, wtpTags.length]);
+  const totalCount = useMemo(() => {
+    return [...intakeTags, ...ohtTags, ...wtpTags].filter(t => !t.notInstalled && t.instrumentType !== 'pump').length;
+  }, [intakeTags, ohtTags, wtpTags]);
 
   const showConnecting = isConnecting;
   const isOnline = isConnected || activeCount > 0;

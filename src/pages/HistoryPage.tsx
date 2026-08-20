@@ -487,8 +487,24 @@ const HistoryPage: React.FC = () => {
       };
       await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
 
-      // Phase 3a: downsample by chosen interval (per-tag bucket = keep latest sample in bucket)
-      let processed: HistorianLog[] = allData.filter(Boolean);
+      // Phase 3a: Deduplicate — keep exactly 1 record per tag_id per 5-min snapshot bucket.
+      // This mirrors the same dedup applied in the screen fetchLogs path. Without this, the
+      // Excel export shows 2x / 4x / 10x duplicate rows when the DB contains both a
+      // backend:5min snapshot AND event-driven browser writes for the same tag at the same time.
+      const DEDUP_BUCKET_MS = 5 * 60 * 1000;
+      const latestPerTagBucket = new Map<string, HistorianLog>();
+      for (const log of allData.filter(Boolean) as HistorianLog[]) {
+        const bucketTs = Math.floor(new Date(log.timestamp).getTime() / DEDUP_BUCKET_MS);
+        const key = `${log.tag_id}|${bucketTs}`;
+        const existing = latestPerTagBucket.get(key);
+        // Keep the record with the latest actual timestamp within the bucket
+        if (!existing || new Date(existing.timestamp).getTime() < new Date(log.timestamp).getTime()) {
+          latestPerTagBucket.set(key, log);
+        }
+      }
+      let processed: HistorianLog[] = Array.from(latestPerTagBucket.values());
+
+      // Phase 3b: Further downsample by user-chosen export interval (30m / 1h / 1d etc.)
       if (exportInterval !== 'all') {
         const bucketMs = INTERVAL_MS[exportInterval];
         const latestByBucket = new Map<string, HistorianLog>();

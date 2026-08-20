@@ -321,7 +321,7 @@ const HistoryPage: React.FC = () => {
       });
   }, [globalFilters.assets]);
 
-  const fetchLogs = useCallback(async (page: number = 1) => {
+  const fetchLogs = useCallback(async (page: number = 1, sizeOverride?: number) => {
     if (!globalFilters.startDate || !globalFilters.endDate) {
       toast({ title: 'Select Date Range', description: 'Please select both start and end dates.', variant: 'destructive' });
       return;
@@ -337,6 +337,7 @@ const HistoryPage: React.FC = () => {
       const endTime = endOfDay(globalFilters.endDate).toISOString();
       const sectionFilters = getSectionFilters();
       const ohtPrefixes = getOhtTagPrefixes();
+      const currentSize = sizeOverride ?? pageSize;
 
       // Run count and data queries in parallel (excluding uninstalled sensors & ad-hoc delta noise)
       let countQuery = supabase.from('historian_logs').select('*', { count: 'exact', head: true })
@@ -350,7 +351,7 @@ const HistoryPage: React.FC = () => {
         countQuery = countQuery.or(ohtFilter);
       }
 
-      const offset = (page - 1) * pageSize;
+      const offset = (page - 1) * currentSize;
       let dataQuery = supabase.from('historian_logs')
         .select(`id, tag_id, section, value, timestamp, tag_config:tag_config_id (label, unit)`)
         .gte('timestamp', startTime).lte('timestamp', endTime)
@@ -359,7 +360,7 @@ const HistoryPage: React.FC = () => {
         .order('timestamp', { ascending: false })
         .order('section', { ascending: true })
         .order('tag_id', { ascending: true })
-        .range(offset, offset + pageSize - 1);
+        .range(offset, offset + currentSize - 1);
       if (sectionFilters.length > 0) dataQuery = dataQuery.in('section', sectionFilters);
       if (ohtPrefixes.length > 0 && sectionFilters.includes('oht') && !globalFilters.assets.includes('intake') && !globalFilters.assets.includes('wtp')) {
         const ohtFilter = ohtPrefixes.map(p => `tag_id.like.${p}%`).join(',');
@@ -371,7 +372,8 @@ const HistoryPage: React.FC = () => {
       if (countResult.error) throw countResult.error;
       if (dataResult.error) throw dataResult.error;
 
-      setTotalCount(countResult.count || 0);
+      const total = countResult.count || 0;
+      setTotalCount(total);
       const sorted = [...(dataResult.data as unknown as HistorianLog[])].sort((a, b) => {
         const BUCKET_MS = 5 * 60 * 1000;
         const ta = Math.floor(new Date(a.timestamp).getTime() / BUCKET_MS);
@@ -396,7 +398,7 @@ const HistoryPage: React.FC = () => {
 
       setLogs(deduplicated);
       setCurrentPage(page);
-      if (page === 1) toast({ title: 'Data Loaded', description: `Found ${countResult.count || 0} total records.` });
+      if (page === 1) toast({ title: 'Data Loaded', description: `Loaded ${deduplicated.length} records on this page (${total.toLocaleString()} total found).` });
     } catch (error: any) {
       if (error?.name === 'AbortError') return;
       logError('History.fetchLogs', error);
@@ -404,7 +406,7 @@ const HistoryPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [globalFilters.startDate, globalFilters.endDate, globalFilters.density, getSectionFilters, getOhtTagPrefixes, globalFilters.assets, pageSize, toast]);
+  }, [globalFilters.startDate, globalFilters.endDate, getSectionFilters, getOhtTagPrefixes, globalFilters.assets, pageSize, toast]);
 
   useEffect(() => {
     if (autoRefresh && globalFilters.startDate && globalFilters.endDate && totalCount > 0) {
@@ -690,15 +692,21 @@ const HistoryPage: React.FC = () => {
   }, [globalFilters.startDate, globalFilters.endDate, globalFilters.assets, getSectionFilters, getOhtTagPrefixes, toast, plantName, exportInterval]);
 
   const paginationInfo = useMemo(() => {
-    if (totalPages <= 1) return null;
+    if (totalCount === 0 && logs.length === 0) return null;
     const maxVisible = 5;
+    const effectiveTotalPages = Math.max(1, totalPages);
     let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
-    let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+    let endPage = Math.min(effectiveTotalPages, startPage + maxVisible - 1);
     if (endPage - startPage + 1 < maxVisible) startPage = Math.max(1, endPage - maxVisible + 1);
     const pages = [];
     for (let i = startPage; i <= endPage; i++) pages.push(i);
-    return { pages, from: ((currentPage - 1) * pageSize) + 1, to: Math.min(currentPage * pageSize, totalCount) };
-  }, [totalPages, currentPage, totalCount, pageSize]);
+    return {
+      pages,
+      totalPages: effectiveTotalPages,
+      from: totalCount === 0 ? 0 : ((currentPage - 1) * pageSize) + 1,
+      to: Math.min(currentPage * pageSize, totalCount)
+    };
+  }, [totalPages, currentPage, totalCount, pageSize, logs.length]);
 
   // Sort current page rows for display: latest timestamp first, then within the
   // same minute Intake → WTP → OHT-1/2/3 → tag (so user sees all sections together per time).
@@ -816,16 +824,16 @@ const HistoryPage: React.FC = () => {
               </div>
             ) : (
               <>
-                <div className="rounded-xl border border-border/40 shadow-inner bg-card/30 max-h-[600px] overflow-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
-                  <div className="min-w-[760px] w-full">
-                    <Table className="w-full min-w-[760px]">
-                      <TableHeader className="sticky top-0 bg-secondary/80 backdrop-blur-md border-b border-border/50 z-10">
+                <div className="rounded-xl border border-border/40 shadow-inner bg-card/30 max-h-[70vh] sm:max-h-[75vh] min-h-[350px] overflow-y-auto overflow-x-auto relative scroll-smooth" style={{ WebkitOverflowScrolling: 'touch' }}>
+                  <div className="min-w-[650px] sm:min-w-[760px] w-full">
+                    <Table className="w-full min-w-[650px] sm:min-w-[760px]">
+                      <TableHeader className="sticky top-0 bg-background/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-border/50 z-20 shadow-sm">
                         <TableRow className="hover:bg-transparent border-0">
-                          <TableHead className="text-xs uppercase tracking-wider text-muted-foreground font-bold py-4 pl-6 border-0">Timestamp</TableHead>
-                          <TableHead className="text-xs uppercase tracking-wider text-muted-foreground font-bold py-4 border-0">Section</TableHead>
-                          <TableHead className="text-xs uppercase tracking-wider text-muted-foreground font-bold py-4 border-0">Label</TableHead>
-                          <TableHead className="text-xs uppercase tracking-wider text-muted-foreground font-bold py-4 text-right pr-6 border-0">Value</TableHead>
-                          <TableHead className="text-xs uppercase tracking-wider text-muted-foreground font-bold py-4 pl-4 border-0">Unit</TableHead>
+                          <TableHead className="text-xs uppercase tracking-wider text-muted-foreground font-bold py-3.5 sm:py-4 pl-4 sm:pl-6 border-0">Timestamp</TableHead>
+                          <TableHead className="text-xs uppercase tracking-wider text-muted-foreground font-bold py-3.5 sm:py-4 border-0">Section</TableHead>
+                          <TableHead className="text-xs uppercase tracking-wider text-muted-foreground font-bold py-3.5 sm:py-4 border-0">Label</TableHead>
+                          <TableHead className="text-xs uppercase tracking-wider text-muted-foreground font-bold py-3.5 sm:py-4 text-right pr-4 sm:pr-6 border-0">Value</TableHead>
+                          <TableHead className="text-xs uppercase tracking-wider text-muted-foreground font-bold py-3.5 sm:py-4 pl-2 sm:pl-4 border-0">Unit</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -888,15 +896,15 @@ const HistoryPage: React.FC = () => {
                             <TableRow 
                               key={log.id} 
                               className={cn(
-                                "group border-b border-border/10 transition-all duration-200 hover:-translate-y-[1px] hover:shadow-md", 
+                                "group border-b border-border/30 transition-all duration-200 cursor-default",
                                 rowBorderClass,
                                 rowBgClass
                               )}
                             >
-                              <TableCell className="pl-6 py-4">
-                                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                                  <span className="text-muted-foreground/60 text-[11px] font-medium tracking-tight whitespace-nowrap">{dateStr}</span>
-                                  <span className="text-foreground font-bold tracking-tight text-sm font-mono flex items-center gap-1.5 whitespace-nowrap">
+                              <TableCell className="py-3.5 sm:py-4 pl-4 sm:pl-6 font-mono text-xs text-muted-foreground whitespace-nowrap">
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="font-semibold text-foreground/85 text-[11px] sm:text-xs">{dateStr}</span>
+                                  <span className="text-[10px] sm:text-[11px] text-muted-foreground/80 flex items-center gap-1.5 font-medium">
                                     <span className={cn(
                                       "w-1.5 h-1.5 rounded-full animate-pulse shrink-0",
                                       isIntake && "bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)]",
@@ -907,7 +915,7 @@ const HistoryPage: React.FC = () => {
                                   </span>
                                 </div>
                               </TableCell>
-                              <TableCell className="py-4">
+                              <TableCell className="py-3.5 sm:py-4 whitespace-nowrap">
                                 {isWtp && (
                                   <span className="inline-flex items-center px-2.5 py-1 text-xs font-bold rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 backdrop-blur-sm shadow-sm uppercase tracking-wide">
                                     <WtpSvg className="h-3.5 w-3.5 mr-1.5 text-amber-500 dark:text-amber-400" />
@@ -933,38 +941,38 @@ const HistoryPage: React.FC = () => {
                                   </Badge>
                                 )}
                               </TableCell>
-                              <TableCell className="py-4 font-semibold text-foreground/90 pl-4">
-                                <div className="flex items-center gap-3">
+                              <TableCell className="py-3.5 sm:py-4 font-semibold text-foreground/90 pl-3 sm:pl-4">
+                                <div className="flex items-center gap-2.5 sm:gap-3">
                                   <div className={cn(
-                                    "p-2 rounded-xl border flex items-center justify-center transition-all duration-300 group-hover:scale-110",
+                                    "p-1.5 sm:p-2 rounded-xl border flex items-center justify-center transition-all duration-300 group-hover:scale-110 shrink-0",
                                     iconBorderClass
                                   )}>
                                     {getSensorIcon(log.tag_id, log.tag_config?.label || '')}
                                   </div>
                                   <span className={cn(
-                                    "text-sm tracking-wide text-foreground/90 font-bold transition-colors duration-200",
+                                    "text-xs sm:text-sm tracking-wide text-foreground/90 font-bold transition-colors duration-200 truncate max-w-[200px] sm:max-w-none",
                                     hoverColorClass
                                   )}>
                                     {log.tag_config?.label || log.tag_id}
                                   </span>
                                 </div>
                               </TableCell>
-                              <TableCell className="text-right pr-6 py-4">
+                              <TableCell className="text-right pr-4 sm:pr-6 py-3.5 sm:py-4 whitespace-nowrap">
                                 {isPump ? (
                                   Number(log.value) >= 1 ? (
-                                    <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-extrabold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 shadow-[0_0_12px_rgba(16,185,129,0.25)] relative animate-pulse">
+                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 shadow-[0_0_12px_rgba(16,185,129,0.25)] relative animate-pulse">
                                       <span className="h-2 w-2 rounded-full bg-emerald-500" />
                                       ON
                                     </span>
                                   ) : (
-                                    <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-extrabold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 shadow-inner">
+                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 shadow-inner">
                                       <span className="h-2 w-2 rounded-full bg-rose-500/50" />
                                       OFF
                                     </span>
                                   )
                                 ) : (
                                   <span className={cn(
-                                    "inline-flex items-center px-3 py-1 rounded-xl font-mono font-black text-sm tracking-wider shadow-sm border backdrop-blur-[2px]",
+                                    "inline-flex items-center px-2.5 sm:px-3 py-1 rounded-xl font-mono font-black text-xs sm:text-sm tracking-wider shadow-sm border backdrop-blur-[2px]",
                                     normalizedLabel.includes('level') || normalizedLabel.includes(' rlt') || normalizedLabel.includes('-lt')
                                       ? "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20 shadow-sky-500/5"
                                       : normalizedLabel.includes('pressure') || normalizedLabel.includes('-pt')
@@ -981,7 +989,7 @@ const HistoryPage: React.FC = () => {
                                   </span>
                                 )}
                               </TableCell>
-                              <TableCell className="pl-4 py-4">
+                              <TableCell className="pl-2 sm:pl-4 py-3.5 sm:py-4 whitespace-nowrap">
                                 {log.tag_config?.unit ? (
                                   <span className="inline-flex items-center bg-secondary/50 dark:bg-secondary/20 text-muted-foreground/80 px-2 py-0.5 rounded border border-border/40 text-[10px] font-bold uppercase tracking-wider">
                                     {log.tag_config.unit}
@@ -998,35 +1006,40 @@ const HistoryPage: React.FC = () => {
                   </div>
                 </div>
                 {paginationInfo && (
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 pt-4 border-t border-border/40">
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <div className="text-sm text-muted-foreground font-medium">
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 mt-4 sm:mt-6 pt-4 border-t border-border/40">
+                    <div className="flex items-center justify-between sm:justify-start w-full sm:w-auto gap-3 flex-wrap">
+                      <div className="text-xs sm:text-sm text-muted-foreground font-medium">
                         Showing <span className="font-semibold text-foreground">{paginationInfo.from}</span> - <span className="font-semibold text-foreground">{paginationInfo.to}</span> of <span className="font-semibold text-foreground">{totalCount.toLocaleString()}</span> records
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">Rows:</span>
+                        <span className="text-xs text-muted-foreground font-medium">Rows:</span>
                         <Select
                           value={String(pageSize)}
-                          onValueChange={(v) => { setPageSizeOverride(Number(v)); setCurrentPage(1); fetchLogs(1); }}
+                          onValueChange={(v) => { 
+                            const newSize = Number(v); 
+                            setPageSizeOverride(newSize); 
+                            setCurrentPage(1); 
+                            fetchLogs(1, newSize); 
+                          }}
                         >
-                          <SelectTrigger className="h-8 w-[80px] text-xs">
+                          <SelectTrigger className="h-8 w-[84px] text-xs font-semibold">
                             <SelectValue />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent className="z-[100]">
                             {[25, 50, 100, 200, 500].map(n => (
-                              <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                              <SelectItem key={n} value={String(n)} className="text-xs font-medium">{n}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center justify-center gap-1 sm:gap-1.5 w-full sm:w-auto overflow-x-auto py-1">
                       <Button 
                         variant="outline" 
                         size="icon" 
-                        className="h-8 w-8 rounded-lg border-border/50 hover:bg-secondary transition-all"
+                        className="h-8 w-8 rounded-lg border-border/50 hover:bg-secondary transition-all shrink-0"
                         onClick={() => handlePageChange(1)} 
-                        disabled={currentPage === 1 || isLoading}
+                        disabled={currentPage === 1 || isLoading || totalPages <= 1}
                         title="First page"
                       >
                         <ChevronsLeft className="h-4 w-4" />
@@ -1034,9 +1047,10 @@ const HistoryPage: React.FC = () => {
                       <Button 
                         variant="outline" 
                         size="icon" 
-                        className="h-8 w-8 rounded-lg border-border/50 hover:bg-secondary transition-all"
+                        className="h-8 w-8 rounded-lg border-border/50 hover:bg-secondary transition-all shrink-0"
                         onClick={() => handlePageChange(currentPage - 1)} 
-                        disabled={currentPage === 1 || isLoading}
+                        disabled={currentPage === 1 || isLoading || totalPages <= 1}
+                        title="Previous page"
                       >
                         <ChevronLeft className="h-4 w-4" />
                       </Button>
@@ -1045,13 +1059,13 @@ const HistoryPage: React.FC = () => {
                           key={page} 
                           variant={currentPage === page ? 'default' : 'outline'} 
                           className={cn(
-                            "h-8 min-w-[32px] px-2 rounded-lg transition-all",
+                            "h-8 min-w-[32px] sm:min-w-[36px] px-2 rounded-lg transition-all text-xs shrink-0",
                             currentPage === page 
-                              ? "bg-primary text-primary-foreground hover:bg-primary/95 shadow-md shadow-primary/15" 
-                              : "border-border/50 hover:bg-secondary"
+                              ? "bg-primary text-primary-foreground hover:bg-primary/95 shadow-md shadow-primary/15 font-bold" 
+                              : "border-border/50 hover:bg-secondary font-medium"
                           )}
                           onClick={() => handlePageChange(page)} 
-                          disabled={isLoading}
+                          disabled={isLoading || (currentPage === page && totalPages <= 1)}
                         >
                           {page}
                         </Button>
@@ -1059,18 +1073,19 @@ const HistoryPage: React.FC = () => {
                       <Button 
                         variant="outline" 
                         size="icon" 
-                        className="h-8 w-8 rounded-lg border-border/50 hover:bg-secondary transition-all"
+                        className="h-8 w-8 rounded-lg border-border/50 hover:bg-secondary transition-all shrink-0"
                         onClick={() => handlePageChange(currentPage + 1)} 
-                        disabled={currentPage === totalPages || isLoading}
+                        disabled={currentPage === totalPages || isLoading || totalPages <= 1}
+                        title="Next page"
                       >
                         <ChevronRight className="h-4 w-4" />
                       </Button>
                       <Button 
                         variant="outline" 
                         size="icon" 
-                        className="h-8 w-8 rounded-lg border-border/50 hover:bg-secondary transition-all"
+                        className="h-8 w-8 rounded-lg border-border/50 hover:bg-secondary transition-all shrink-0"
                         onClick={() => handlePageChange(totalPages)} 
-                        disabled={currentPage === totalPages || isLoading}
+                        disabled={currentPage === totalPages || isLoading || totalPages <= 1}
                         title="Last page"
                       >
                         <ChevronsRight className="h-4 w-4" />

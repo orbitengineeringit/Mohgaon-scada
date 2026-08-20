@@ -379,6 +379,17 @@ export const useMqttTagSync = (
         s.mqttKey === mqttKey ||
         s.mqttKey.toUpperCase() === mqttKey.toUpperCase() ||
         // --- Legacy alias fallbacks (backward compatibility for older firmware or manual tests) ---
+        // Intake aliases
+        (mqttKey === 'PT_01' && s.id === 'INT-PT1') ||
+        (mqttKey === 'INTAKE_PT1' && s.id === 'INT-PT1') ||
+        (mqttKey === 'PT_02' && s.id === 'INT-PT2') ||
+        (mqttKey === 'INTAKE_PT2' && s.id === 'INT-PT2') ||
+        (mqttKey === 'PT_03' && s.id === 'INT-CombinedPT') ||
+        (mqttKey === 'INTAKE_PT3' && s.id === 'INT-CombinedPT') ||
+        (mqttKey === 'PT_COM' && s.id === 'INT-CombinedPT') ||
+        (mqttKey === 'INTAKE_LT' && s.id === 'INT-LT') ||
+        (mqttKey === 'INTAKE_FLOW' && s.id === 'INT-Flow') ||
+        (mqttKey === 'INTAKE_TOT' && s.id === 'INT-Totalizer') ||
         // PT_1/PT_2 → HT Pump pressure sensors
         (mqttKey === 'PT_1' && s.id === 'WTP-PT1') ||
         (mqttKey === 'PT_2' && s.id === 'WTP-PT2') ||
@@ -408,12 +419,12 @@ export const useMqttTagSync = (
         (mqttKey === 'CWR_TR' && s.id === 'WTP-TA') ||
         (mqttKey === 'CWR_TEM' && s.id === 'WTP-TEM') ||
         // General section-aware fallbacks
-        (mqttKey === 'LEVEL' && (s.instrumentType === 'lt' || s.mqttKey.endsWith('_LT'))) ||
-        (mqttKey === 'FLOW' && (s.instrumentType === 'flow' || s.mqttKey.endsWith('_FLOW') || s.mqttKey === 'RAW_EFM_FLOW')) ||
-        (mqttKey === 'TOTALIZER' && (s.instrumentType === 'totalizer' || s.mqttKey.endsWith('_TOT') || s.mqttKey === 'RAW_EFM')) ||
+        (mqttKey === 'LEVEL' && (s.instrumentType === 'lt' || s.mqttKey.endsWith('_LT') || s.mqttKey === 'RLT')) ||
+        (mqttKey === 'FLOW' && (s.instrumentType === 'flow' || s.mqttKey.endsWith('_FLOW') || s.mqttKey === 'RAW_EFM_FLOW' || s.mqttKey === 'EFM_FLOW')) ||
+        (mqttKey === 'TOTALIZER' && (s.instrumentType === 'totalizer' || s.mqttKey.endsWith('_TOT') || s.mqttKey === 'RAW_EFM' || s.mqttKey === 'EFM')) ||
         (mqttKey === 'PT_01' && (s.mqttKey.endsWith('_PT1') || s.mqttKey === 'PT_01' || s.mqttKey === 'PT_1')) ||
         (mqttKey === 'PT_02' && (s.mqttKey.endsWith('_PT2') || s.mqttKey === 'PT_02' || s.mqttKey === 'PT_2')) ||
-        (mqttKey === 'PT_03' && (s.mqttKey.endsWith('_PT3') || s.mqttKey === 'PT_03')) ||
+        (mqttKey === 'PT_03' && (s.mqttKey.endsWith('_PT3') || s.mqttKey === 'PT_03' || s.mqttKey === 'PT_3')) ||
         (mqttKey === 'CWR_LEVEL' && s.mqttKey === 'CWR_LT') ||
         (mqttKey === 'BW_LEVEL' && s.mqttKey === 'BW_LT') ||
         (mqttKey === 'PH' && s.mqttKey === 'CWR_PH') ||

@@ -124,18 +124,23 @@ const IntakePage: React.FC = () => {
   const pump2Tag = findTag('INT-Pump2');
   const pt1Tag = findTag('INT-PT1');
   const pt2Tag = findTag('INT-PT2');
+  const combinedPtTag = findTag('INT-CombinedPT');
   const pt1Val = pt1Tag?.value ?? 0;
   const pt2Val = pt2Tag?.value ?? 0;
+  const combinedPtVal = combinedPtTag?.value ?? 0;
 
   const pump1Running = pt1Val > 1.5;
   const pump2Running = pt2Val > 1.5;
 
   const combinedPtValue = useMemo(() => {
+    if (combinedPtTag && combinedPtTag.status === 'connected' && combinedPtVal > 0) {
+      return combinedPtVal;
+    }
     if (pump1Running && pump2Running) return (pt1Val + pt2Val) / 2;
     if (pump1Running) return pt1Val;
     if (pump2Running) return pt2Val;
-    return (pt1Val + pt2Val) / 2;
-  }, [pump1Running, pump2Running, pt1Val, pt2Val]);
+    return combinedPtVal;
+  }, [combinedPtTag, combinedPtVal, pump1Running, pump2Running, pt1Val, pt2Val]);
 
   const sensorMap = useMemo(() => {
     const map: Record<string, typeof INTAKE_SENSORS[0]> = {};

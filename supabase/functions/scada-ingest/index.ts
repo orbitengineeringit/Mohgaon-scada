@@ -39,7 +39,7 @@ type ParsedMessage = {
 };
 
 const DEFAULT_TOPICS = {
-  INTAKE: "OES/M7g4/Nk3a/8672x4Af",
+  INTAKE: "mohgaon/intake",
   WTP: "mohgaon/wtp",
   OHT1: "OES/M7g4/Ov1h/8672x4Af",
   OHT2: "OES/M7g4/Ov2h/8672x4Af",
@@ -61,13 +61,14 @@ const ohtSensors = (n: number): Sensor[] => {
 };
 
 const SENSORS: Sensor[] = [
-  // === INTAKE sensors (logged first) ===
-  { id: "INT-PT1", mqttKey: "PT_01", label: "Pressure 1 (PT)", unit: "Bar", min: 0, max: 10, section: "intake", instrumentType: "pt" },
-  { id: "INT-PT2", mqttKey: "PT_02", label: "Pressure 2 (PT)", unit: "Bar", min: 0, max: 10, section: "intake", instrumentType: "pt" },
-  { id: "INT-CombinedPT", mqttKey: "PT_03", label: "Combined Pressure (P1+P2)", unit: "Bar", min: 0, max: 10, section: "intake", instrumentType: "combined_pt" },
-  { id: "INT-LT", mqttKey: "LEVEL", label: "Level (LT)", unit: "Meter", min: 0, max: 7, section: "intake", instrumentType: "lt" },
-  { id: "INT-Flow", mqttKey: "FLOW", label: "Flow Meter", unit: "m³/hr", min: 0, max: 200, section: "intake", instrumentType: "flow" },
-  { id: "INT-Totalizer", mqttKey: "TOTALIZER", label: "Totalizer", unit: "m³", min: 0, max: 999999, section: "intake", instrumentType: "totalizer" },
+  // === INTAKE sensors (logged first) — Mohgaon plant: RTU Device ID: 02500225110500008735 ===
+  // mqttKey values match exact PLC r_data tag names from mohgaon/intake topic
+  { id: "INT-PT1", mqttKey: "PT_1", label: "Pressure 1 (PT)", unit: "Bar", min: 0, max: 10, section: "intake", instrumentType: "pt" },
+  { id: "INT-PT2", mqttKey: "PT_2", label: "Pressure 2 (PT)", unit: "Bar", min: 0, max: 10, section: "intake", instrumentType: "pt" },
+  { id: "INT-CombinedPT", mqttKey: "PT_3", label: "Main Header Pressure", unit: "Bar", min: 0, max: 10, section: "intake", instrumentType: "combined_pt" },
+  { id: "INT-LT", mqttKey: "RLT", label: "Level (LT)", unit: "%", min: 0, max: 100, section: "intake", instrumentType: "lt" },
+  { id: "INT-Flow", mqttKey: "EFM_FLOW", label: "Flow Meter", unit: "m³/hr", min: 0, max: 200, section: "intake", instrumentType: "flow" },
+  { id: "INT-Totalizer", mqttKey: "EFM", label: "Totalizer", unit: "m³", min: 0, max: 999999, section: "intake", instrumentType: "totalizer" },
   { id: "INT-Pump1", mqttKey: "", label: "VT Pump 1", unit: "", min: 0, max: 1, section: "intake", instrumentType: "pump" },
   { id: "INT-Pump2", mqttKey: "", label: "VT Pump 2", unit: "", min: 0, max: 1, section: "intake", instrumentType: "pump" },
   // === WTP sensors (logged second) — Mohgaon plant: 2 HT Pumps, RTU Device ID: 02500225110500007666 ===
@@ -108,14 +109,17 @@ const PT_TO_PUMP: Record<string, string> = {
 // MQTT key aliases: maps legacy/alternative key names to canonical PLC tags
 // Primary keys are the real RTU-published tag names; aliases are for backward compat
 const MQTT_KEY_ALIASES: Record<string, string[]> = {
+  // Intake tags — canonical: PT_1, PT_2, PT_3, RLT, EFM, EFM_FLOW
+  "RLT": ["RLT", "INTAKE_LT", "LEVEL", "Level"],
+  "EFM_FLOW": ["EFM_FLOW", "INTAKE_FLOW", "FLOW", "Flow", "INT_FLOW"],
+  "EFM": ["EFM", "INTAKE_TOT", "TOTALIZER", "INT_TOT"],
   // WTP levels
   "BW_LT": ["BW_LEVEL", "BW_LT"],
   "CWR_LT": ["CWR_LEVEL", "CWR_LT"],
-  // WTP pressures — canonical RTU tags: PT_1, PT_2, PT_3
-  "PT_1": ["PT_1", "CWR_PT1", "PT_01"],
-  "PT_2": ["PT_2", "CWR_PT2", "PT_02"],
-  // PT_3 = Combined Header Pressure (direct PLC tag — NOT a VT pump)
-  "PT_3": ["PT_3", "PT_03"],
+  // Pressures — canonical RTU tags: PT_1, PT_2, PT_3
+  "PT_1": ["PT_1", "CWR_PT1", "PT_01", "INTAKE_PT1"],
+  "PT_2": ["PT_2", "CWR_PT2", "PT_02", "INTAKE_PT2"],
+  "PT_3": ["PT_3", "PT_03", "INTAKE_PT3", "PT_COM"],
   // Inlet flow/totalizer — canonical: RAW_EFM_FLOW, RAW_EFM
   "RAW_EFM_FLOW": ["RAW_EFM_FLOW", "FLOWMETER", "FLOW", "FLOW_IN"],
   "RAW_EFM": ["RAW_EFM", "TOTALIZER", "TOTALIZER_IN"],

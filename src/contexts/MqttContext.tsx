@@ -267,13 +267,13 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
       return { section: 'oht' };
     }
     const upperTopic = topic.toUpperCase();
-    if (upperTopic.includes('INTAKE') || upperTopic.includes('INT') || upperTopic.includes('NK3A')) return { section: 'intake' };
+    if (upperTopic.includes('INTAKE') || upperTopic.includes('INT') || upperTopic.includes('NK3A') || topic.toLowerCase().includes('intake')) return { section: 'intake' };
     if (upperTopic.includes('WTP') || upperTopic.includes('TR8P') || topic.toLowerCase().includes('wtp')) return { section: 'wtp' };
 
     // Payload tag inspection fallback
     if (payloadStr) {
-      if (payloadStr.includes('INTAKE_') || payloadStr.includes('INT_')) return { section: 'intake' };
-      if (payloadStr.includes('RAW_PH') || payloadStr.includes('RAW_EFM') || payloadStr.includes('FLOWMETER') || payloadStr.includes('CWR_') || payloadStr.includes('BW_LT')) return { section: 'wtp' };
+      if (payloadStr.includes('02500225110500008735') || payloadStr.includes('RLT') || payloadStr.includes('INTAKE_') || payloadStr.includes('INT_')) return { section: 'intake' };
+      if (payloadStr.includes('02500225110500007666') || payloadStr.includes('RAW_PH') || payloadStr.includes('RAW_EFM') || payloadStr.includes('FLOWMETER') || payloadStr.includes('CWR_') || payloadStr.includes('BW_LT')) return { section: 'wtp' };
       if (payloadStr.includes('OHT1_')) return { section: 'oht', subsection: 'OHT-1' };
       if (payloadStr.includes('OHT2_')) return { section: 'oht', subsection: 'OHT-2' };
       if (payloadStr.includes('OHT3_')) return { section: 'oht', subsection: 'OHT-3' };

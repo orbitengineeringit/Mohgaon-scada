@@ -50,14 +50,15 @@ export const OHT4_SENSORS = createOhtSensors(4);
 export const ALL_OHT_SENSORS = [...OHT1_SENSORS, ...OHT2_SENSORS, ...OHT3_SENSORS, ...OHT4_SENSORS];
 
 // ==================== INTAKE SENSORS ====================
-// PT1, PT2, CombinedPT, Level, Flow, Totalizer (computed), KW (not installed), 2 VT Pumps (derived from PT)
+// PT1, PT2, Main Header PT, Level, Flow, Totalizer, KW (not installed), 2 VT Pumps (derived from PT)
+// mqttKey values match exact PLC r_data tag names from mohgaon/intake topic (Device ID: 02500225110500008735)
 export const INTAKE_SENSORS: MohgaonSensor[] = [
-  { id: 'INT-PT1', mqttKey: 'INTAKE_PT1', label: 'Pressure 1 (PT)', unit: 'Bar', min: 0, max: 10, section: 'intake', type: 'analog', instrumentType: 'pt' },
-  { id: 'INT-PT2', mqttKey: 'INTAKE_PT2', label: 'Pressure 2 (PT)', unit: 'Bar', min: 0, max: 10, section: 'intake', type: 'analog', instrumentType: 'pt' },
-  { id: 'INT-CombinedPT', mqttKey: 'INTAKE_PT3', label: 'Combined Pressure (P1+P2)', unit: 'Bar', min: 0, max: 10, section: 'intake', type: 'analog', instrumentType: 'combined_pt' },
-  { id: 'INT-LT', mqttKey: 'INTAKE_LT', label: 'Level (LT)', unit: 'Meter', min: 0, max: 7, section: 'intake', type: 'analog', instrumentType: 'lt' },
-  { id: 'INT-Flow', mqttKey: 'INTAKE_FLOW', label: 'Flow Meter', unit: 'm³/hr', min: 0, max: 200, section: 'intake', type: 'analog', instrumentType: 'flow' },
-  { id: 'INT-Totalizer', mqttKey: 'INTAKE_TOT', label: 'Totalizer', unit: 'm³', min: 0, max: 999999, section: 'intake', type: 'totalizer', instrumentType: 'totalizer' },
+  { id: 'INT-PT1', mqttKey: 'PT_1', label: 'Pressure 1 (PT)', unit: 'Bar', min: 0, max: 10, section: 'intake', type: 'analog', instrumentType: 'pt' },
+  { id: 'INT-PT2', mqttKey: 'PT_2', label: 'Pressure 2 (PT)', unit: 'Bar', min: 0, max: 10, section: 'intake', type: 'analog', instrumentType: 'pt' },
+  { id: 'INT-CombinedPT', mqttKey: 'PT_3', label: 'Main Header Pressure', unit: 'Bar', min: 0, max: 10, section: 'intake', type: 'analog', instrumentType: 'combined_pt' },
+  { id: 'INT-LT', mqttKey: 'RLT', label: 'Level (LT)', unit: '%', min: 0, max: 100, section: 'intake', type: 'analog', instrumentType: 'lt' },
+  { id: 'INT-Flow', mqttKey: 'EFM_FLOW', label: 'Flow Meter', unit: 'm³/hr', min: 0, max: 200, section: 'intake', type: 'analog', instrumentType: 'flow' },
+  { id: 'INT-Totalizer', mqttKey: 'EFM', label: 'Totalizer', unit: 'm³', min: 0, max: 999999, section: 'intake', type: 'totalizer', instrumentType: 'totalizer' },
   { id: 'INT-KW', mqttKey: 'KW', label: 'Energy Meter', unit: 'kW', min: 0, max: 100, section: 'intake', type: 'analog', instrumentType: 'kw', notInstalled: true },
   { id: 'INT-Pump1', mqttKey: '', label: 'VT Pump 1', unit: '', min: 0, max: 1, section: 'intake', type: 'digital', instrumentType: 'pump', derivedFromPt: 'INT-PT1' },
   { id: 'INT-Pump2', mqttKey: '', label: 'VT Pump 2', unit: '', min: 0, max: 1, section: 'intake', type: 'digital', instrumentType: 'pump', derivedFromPt: 'INT-PT2' },
@@ -128,7 +129,7 @@ const getEnv = (key: string): string | undefined => {
 
 // Default topics for Mohgaon plant per station Topic Map
 export const DEFAULT_MQTT_TOPICS: Record<string, string> = {
-  INTAKE: getEnv('VITE_MQTT_TOPIC_INTAKE') || getEnv('NEXT_PUBLIC_MQTT_TOPIC_INTAKE') || 'OES/M7g4/Nk3a/8672x4Af',
+  INTAKE: getEnv('VITE_MQTT_TOPIC_INTAKE') || getEnv('NEXT_PUBLIC_MQTT_TOPIC_INTAKE') || 'mohgaon/intake',
   WTP:    getEnv('VITE_MQTT_TOPIC_WTP') || getEnv('NEXT_PUBLIC_MQTT_TOPIC_WTP') || 'mohgaon/wtp',
   OHT1:   getEnv('VITE_MQTT_TOPIC_OHT1') || getEnv('NEXT_PUBLIC_MQTT_TOPIC_OHT1') || 'OES/M7g4/Ov1h/8672x4Af',
   OHT2:   getEnv('VITE_MQTT_TOPIC_OHT2') || getEnv('NEXT_PUBLIC_MQTT_TOPIC_OHT2') || 'OES/M7g4/Ov2h/8672x4Af',
@@ -206,6 +207,9 @@ export const VALID_OHT_KEYS = [
 ];
 
 export const VALID_INTAKE_KEYS = [
+  // === Canonical PLC r_data tag names (primary — exact RTU output for 02500225110500008735) ===
+  'PT_1', 'PT_2', 'PT_3', 'RLT', 'EFM', 'EFM_FLOW',
+  // === Legacy/alias keys (backward compatibility with older firmware or manual tests) ===
   'INTAKE_LT', 'INTAKE_FLOW', 'INTAKE_TOT', 'INTAKE_PT1', 'INTAKE_PT2', 'INTAKE_PT3',
   'PT', 'PT_01', 'PT_02', 'PT_03', 'PT_COM', 'LEVEL', 'Level', 'FLOW', 'Flow', 'TOTALIZER', 'KW'
 ];

@@ -18,9 +18,11 @@ const IntakeProcessSimulation: React.FC = () => {
   const totalizerTag = findTag('INT-Totalizer');
   const pump1Tag = findTag('INT-Pump1');
   const pump2Tag = findTag('INT-Pump2');
+  const combinedPtTag = findTag('INT-CombinedPT');
 
   const pt1Val = pt1Tag?.value ?? 0;
   const pt2Val = pt2Tag?.value ?? 0;
+  const combinedPtVal = combinedPtTag?.value ?? 0;
   const ltVal = ltTag?.value ?? 0;
   const flowVal = flowTag?.value ?? 0;
   const totalizerVal = totalizerTag?.value ?? 0;
@@ -34,11 +36,14 @@ const IntakeProcessSimulation: React.FC = () => {
     : 0;
 
   const combinedPt = useMemo(() => {
+    if (combinedPtTag && combinedPtTag.status === 'connected' && combinedPtVal > 0) {
+      return combinedPtVal;
+    }
     if (pump1Running && pump2Running) return (pt1Val + pt2Val) / 2;
     if (pump1Running) return pt1Val;
     if (pump2Running) return pt2Val;
-    return 0;
-  }, [pump1Running, pump2Running, pt1Val, pt2Val]);
+    return combinedPtVal;
+  }, [combinedPtTag, combinedPtVal, pump1Running, pump2Running, pt1Val, pt2Val]);
 
   // ═══ Colors from IntakePump.tsx ═══
   const pBody = 'hsl(220 60% 42%)';

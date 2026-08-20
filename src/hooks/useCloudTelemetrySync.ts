@@ -38,14 +38,22 @@ export const useCloudTelemetrySync = ({
         const val = typeof rawEntry === 'object' && rawEntry !== null ? rawEntry.value : rawEntry;
         if (typeof val !== 'number' || isNaN(val)) return tag;
 
+        const entryTs = typeof rawEntry === 'object' && rawEntry !== null && rawEntry.timestamp 
+          ? new Date(rawEntry.timestamp) 
+          : now;
+        const elapsedMs = now.getTime() - entryTs.getTime();
+        // Freshness window: 90 seconds (3× 30s RTU interval)
+        const isFresh = elapsedMs <= 90000;
+        const tagStatus = isFresh ? ('connected' as const) : ('disconnected' as const);
+
         return {
           ...tag,
-          value: val,
-          status: 'connected' as const,
+          value: isFresh ? val : (tag.value ?? val),
+          status: tagStatus,
           source: 'mqtt' as const,
-          isActive: true,
-          lastDataTime: now,
-          timestamp: now,
+          isActive: isFresh,
+          lastDataTime: entryTs,
+          timestamp: entryTs,
         };
       }));
     };
@@ -54,7 +62,7 @@ export const useCloudTelemetrySync = ({
     updateTags(setOhtTags);
     updateTags(setWtpTags);
 
-    // Update derived pump states (Only if PT sensor actually received valid data)
+    // Update derived pump states (Only if PT sensor is actually fresh & connected)
     const applyPumps = (setter: React.Dispatch<React.SetStateAction<TagData[]>>) => {
       setter(prev => {
         return prev.map(tag => {
@@ -67,12 +75,12 @@ export const useCloudTelemetrySync = ({
                 value: isRunning,
                 status: 'connected' as const,
                 source: 'mqtt' as const,
-                isActive: true,
+                isActive: isRunning === 1,
                 lastDataTime: ptTag.lastDataTime,
-                timestamp: now,
+                timestamp: ptTag.timestamp || now,
               };
             } else {
-              // If PT sensor has not received data, pump is OFF and disconnected
+              // If PT sensor has not received fresh data or is disconnected, pump is OFF and disconnected
               return {
                 ...tag,
                 value: 0,

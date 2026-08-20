@@ -129,8 +129,8 @@ const IntakePage: React.FC = () => {
   const pt2Val = pt2Tag?.value ?? 0;
   const combinedPtVal = combinedPtTag?.value ?? 0;
 
-  const pump1Running = pt1Val > 1.5;
-  const pump2Running = pt2Val > 1.5;
+  const pump1Running = (pt1Tag?.status === 'connected' && pt1Val > 1.5) || (pump1Tag?.status === 'connected' && pump1Tag?.value === 1);
+  const pump2Running = (pt2Tag?.status === 'connected' && pt2Val > 1.5) || (pump2Tag?.status === 'connected' && pump2Tag?.value === 1);
 
   const combinedPtValue = useMemo(() => {
     if (combinedPtTag && combinedPtTag.status === 'connected' && combinedPtVal > 0) {

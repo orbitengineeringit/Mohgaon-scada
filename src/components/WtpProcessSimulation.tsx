@@ -555,12 +555,16 @@ const WtpProcessSimulation: React.FC = () => {
   const kwVal = 0;
   const kwConnection = 'no-data' as const;
 
-  const pt1Val = findTag('WTP-PT1')?.value ?? 0;
-  const pt2Val = findTag('WTP-PT2')?.value ?? 0;
+  const pt1Tag = findTag('WTP-PT1');
+  const pt2Tag = findTag('WTP-PT2');
+  const pump1Tag = findTag('WTP-Pump1');
+  const pump2Tag = findTag('WTP-Pump2');
+  const pt1Val = pt1Tag?.value ?? 0;
+  const pt2Val = pt2Tag?.value ?? 0;
   const headerPtVal = findTag('WTP-HeaderPT')?.value ?? 0; // PT_3 = Combined Header Pressure
 
-  const pump1On = pt1Val > 1.5;
-  const pump2On = pt2Val > 1.5;
+  const pump1On = (pt1Tag?.status === 'connected' && pt1Val > 1.5) || (pump1Tag?.status === 'connected' && pump1Tag?.value === 1);
+  const pump2On = (pt2Tag?.status === 'connected' && pt2Val > 1.5) || (pump2Tag?.status === 'connected' && pump2Tag?.value === 1);
   const anyPumpOn = pump1On || pump2On;
 
   // Combined header pressure: use direct PLC reading (PT_3/WTP-HeaderPT) if available,

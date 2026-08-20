@@ -226,7 +226,7 @@ const WtpPage: React.FC = () => {
               const pumpTag = findTag(pumpId);
               const ptSensor = sensorMap[ptId];
               const ptTag = findTag(ptId);
-              const isPumpOn = ptTag ? ptTag.value > 1.5 : false;
+              const isPumpOn = ptTag && ptTag.status === 'connected' ? ptTag.value > 1.5 : false;
               return (
                 <div key={pumpId} className="flex flex-col gap-3">
                   {pumpSensor && pumpTag && (

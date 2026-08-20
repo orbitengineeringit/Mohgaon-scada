@@ -27,8 +27,8 @@ const IntakeProcessSimulation: React.FC = () => {
   const flowVal = flowTag?.value ?? 0;
   const totalizerVal = totalizerTag?.value ?? 0;
 
-  const pump1Running = pt1Val > 1.5;
-  const pump2Running = pt2Val > 1.5;
+  const pump1Running = (pt1Tag?.status === 'connected' && pt1Val > 1.5) || (pump1Tag?.status === 'connected' && pump1Tag?.value === 1);
+  const pump2Running = (pt2Tag?.status === 'connected' && pt2Val > 1.5) || (pump2Tag?.status === 'connected' && pump2Tag?.value === 1);
   const anyPumpRunning = pump1Running || pump2Running;
 
   const levelPercent = ltTag

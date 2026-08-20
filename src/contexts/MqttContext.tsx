@@ -47,8 +47,8 @@ const getDefaultBrokerUrl = () => {
   return url;
 };
 
-const defaultUsername = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_MQTT_USERNAME) || 'orbit';
-const defaultPassword = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_MQTT_PASSWORD) || 'H5WoayaqynLWpgqC';
+const defaultUsername = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_MQTT_USERNAME) || '';
+const defaultPassword = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_MQTT_PASSWORD) || '';
 
 const defaultConfig: MqttConfig = {
   brokerUrl: getDefaultBrokerUrl(),

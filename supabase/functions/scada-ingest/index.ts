@@ -288,8 +288,8 @@ async function collectSnapshot(cfg: MqttConfig | null): Promise<ParsedMessage[]>
   return await new Promise((resolve, reject) => {
     const client = mqtt.connect(brokerUrl, {
       clientId: `${cfg?.client_id || "mohgaon-backend"}-${crypto.randomUUID().slice(0, 8)}`,
-      username: Deno.env.get("MQTT_USERNAME") || "orbit",
-      password: Deno.env.get("MQTT_PASSWORD") || "H5WoayaqynLWpgqC",
+      username: Deno.env.get("MQTT_USERNAME") || "",
+      password: Deno.env.get("MQTT_PASSWORD") || "",
       protocolVersion: 4,
       clean: true,
       connectTimeout: 10_000,

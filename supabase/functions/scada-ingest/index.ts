@@ -399,7 +399,19 @@ Deno.serve(async (req: Request) => {
     }));
     const uniqueTagRows = Array.from(new Map(tagRows.map(r => [`${r.section}-${r.tag_id}`, r])).values());
     if (uniqueTagRows.length > 0) {
+      // FIX 1a: ignoreDuplicates:true → safely inserts NEW tags without overwriting
+      // user-configured alarm_enabled / setpoints on existing tags.
       await supabase.from("tag_config").upsert(uniqueTagRows, { onConflict: "section,tag_id", ignoreDuplicates: true });
+
+      // FIX 1b: Separately patch label + unit so stale DB values (e.g. "METER" → "%")
+      // are always corrected to match the current sensor definition, without touching
+      // alarm_enabled, high_setpoint, low_setpoint, or other user-controlled columns.
+      await Promise.all(uniqueTagRows.map(row =>
+        supabase.from("tag_config")
+          .update({ label: row.label, unit: row.unit })
+          .eq("section", row.section)
+          .eq("tag_id", row.tag_id)
+      ));
     }
 
     const { data: configs, error: cfgErr } = await supabase
@@ -429,22 +441,25 @@ Deno.serve(async (req: Request) => {
         mqtt_topic: topic,
       }));
 
-    // Prevent database bloat: only write to historian_logs once per 5-minute window
-    const { data: existingBucket } = await supabase
+    // FIX 2: Per-section bucket guard — check each section independently.
+    // Previously a single global check caused WTP/OHT data to be silently
+    // skipped whenever Intake had already been saved in the same 5-min bucket.
+    const sectionsPresentInSnapshot = [...new Set(logs.map(l => l.section))];
+    const { data: existingBuckets } = await supabase
       .from("historian_logs")
-      .select("id")
+      .select("section")
       .eq("timestamp", alignedTs)
-      .limit(1)
-      .maybeSingle();
+      .in("section", sectionsPresentInSnapshot);
 
-    const shouldSaveToDb = !existingBucket;
+    const savedSections = new Set((existingBuckets || []).map((r: any) => r.section));
+    const logsToSave = logs.filter(l => !savedSections.has(l.section));
 
-    if (shouldSaveToDb && logs.length > 0) {
-      console.log(`Inserting ${logs.length} historian records for 5-min snapshot at ${alignedTs}`);
-      const { error: insertErr } = await supabase.from("historian_logs").insert(logs);
+    if (logsToSave.length > 0) {
+      console.log(`Inserting ${logsToSave.length} historian records for 5-min snapshot at ${alignedTs} (sections: ${[...new Set(logsToSave.map(l => l.section))].join(", ")})`);
+      const { error: insertErr } = await supabase.from("historian_logs").insert(logsToSave);
       if (insertErr) console.error(`historian insert failed: ${insertErr.message}`);
     } else {
-      console.log(`Live sync: Bucket ${alignedTs} already saved. Returning live telemetry in-memory.`);
+      console.log(`Live sync: All sections already saved for bucket ${alignedTs}. Returning live telemetry in-memory.`);
     }
 
     // Backend Alarm Detection & Debounce (bulk query)

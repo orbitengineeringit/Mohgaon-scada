@@ -18,6 +18,7 @@ const StatusBar = memo(forwardRef<HTMLDivElement>((_, ref) => {
     return () => clearInterval(timer);
   }, []);
 
+  const activeCount = getActiveTagCount();
   const totalCount = useMemo(() => {
     return [...intakeTags, ...ohtTags, ...wtpTags].filter(t => !t.notInstalled && t.instrumentType !== 'pump').length;
   }, [intakeTags, ohtTags, wtpTags]);

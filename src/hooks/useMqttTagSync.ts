@@ -245,60 +245,10 @@ export const useMqttTagSync = (
     } catch (error) { logError('TagSync.refreshCache', error); }
   }, []);
 
-  const SNAPSHOT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
-  const lastSavedBucketRef = useRef<number>(Math.floor(Date.now() / (5 * 60 * 1000)));
-
-  const checkWallClockSnapshot = useCallback(() => {
-    const now = Date.now();
-    const currentBucket = Math.floor(now / SNAPSHOT_INTERVAL_MS);
-    if (currentBucket > lastSavedBucketRef.current) {
-      const alignedTs = new Date(currentBucket * SNAPSHOT_INTERVAL_MS).toISOString();
-      const { intakeTags: currentIntake, ohtTags: currentOht, wtpTags: currentWtp } = tagsRef.current;
-      
-      const UNINSTALLED = new Set(['WTP-Pump3', 'WTP-Pump4', 'WTP-PT3', 'WTP-PT4', 'WTP-CombinedPT1', 'WTP-CombinedPT2', 'WTP-KW', 'INT-KW']);
-      
-      const getSectionOrder = (section: string, tagId: string): number => {
-        if (section === 'intake') return 0;
-        if (section === 'wtp') return 1;
-        if (section === 'oht') {
-          const m = tagId.match(/^OHT[-_\s]*([0-9]+)/i);
-          return 1 + (m ? parseInt(m[1], 10) : 99);
-        }
-        return 99;
-      };
-
-      const allTags = [
-        ...currentIntake.map(t => ({ tag: t, section: 'intake' as const })),
-        ...currentWtp.map(t => ({ tag: t, section: 'wtp' as const })),
-        ...currentOht.map(t => ({ tag: t, section: 'oht' as const })),
-      ]
-      .filter(item => !UNINSTALLED.has(item.tag.id))
-      .sort((a, b) => {
-        const oa = getSectionOrder(a.section, a.tag.id);
-        const ob = getSectionOrder(b.section, b.tag.id);
-        if (oa !== ob) return oa - ob;
-        return a.tag.id.localeCompare(b.tag.id);
-      });
-
-      let addedCount = 0;
-      for (const { tag, section } of allTags) {
-        if (tag.status === 'connected' || tag.isActive || tag.value !== 0) {
-          pendingLogs.current.push({
-            tagId: tag.id,
-            value: tag.value,
-            section,
-            topic: tag.mqttTopic || '',
-            reason: 'interval',
-            alignedTimestamp: alignedTs,
-          });
-          addedCount++;
-        }
-      }
-      if (addedCount > 0) {
-        lastSavedBucketRef.current = currentBucket;
-      }
-    }
-  }, []);
+  // NOTE: Browser-side 5-minute periodic snapshots have been intentionally removed.
+  // Periodic historian writes are handled exclusively by the server-side
+  // pg_cron → scada-ingest Edge Function to prevent duplicate DB rows.
+  // Only event-driven writes (alarm, abnormal, state_change) are sent from the browser.
 
   const startBatchWriter = useCallback(() => {
     if (flushInterval.current) return () => {};
@@ -333,7 +283,7 @@ export const useMqttTagSync = (
     return () => {
       if (flushInterval.current) { clearInterval(flushInterval.current); flushInterval.current = null; }
     };
-  }, [ensureTagConfigExists, refreshTagConfigCache, checkWallClockSnapshot]);
+  }, [ensureTagConfigExists, refreshTagConfigCache]);
 
   const processMqttMessage = useCallback(async (message: MqttMessage) => {
     const { payload, section, subsection, topic } = message;

@@ -282,7 +282,7 @@ function normalizeBrokerUrl(url: string | null | undefined): string {
   return raw;
 }
 
-async function collectSnapshot(cfg: MqttConfig | null): Promise<ParsedMessage[]> {
+async function collectSnapshot(cfg: MqttConfig | null, captureWindowMs: number): Promise<ParsedMessage[]> {
   const brokerUrl = normalizeBrokerUrl(cfg?.broker_url);
   const { topics, topicToSection } = topicSetup(cfg);
   const messages: ParsedMessage[] = [];
@@ -300,18 +300,16 @@ async function collectSnapshot(cfg: MqttConfig | null): Promise<ParsedMessage[]>
       keepalive: 15,
     });
     let settled = false;
-    let earlyExitTimer: ReturnType<typeof setTimeout> | null = null;
 
     const finish = (err?: Error) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      if (earlyExitTimer) clearTimeout(earlyExitTimer);
       try { client.end(true); } catch { /* ignore */ }
       if (err && messages.length === 0) reject(err);
       else resolve(messages);
     };
-    const timer = setTimeout(() => finish(), 50_000);
+    const timer = setTimeout(() => finish(), captureWindowMs);
 
     client.on("connect", () => {
       console.log(`Connected to MQTT broker at ${brokerUrl}, subscribing to: ${topics.join(", ")}`);
@@ -328,10 +326,6 @@ async function collectSnapshot(cfg: MqttConfig | null): Promise<ParsedMessage[]>
       }
       if (seenTopics.size >= topics.length) {
         finish();
-        return;
-      }
-      if (seenTopics.size >= 1 && !earlyExitTimer) {
-        earlyExitTimer = setTimeout(() => finish(), 12_000);
       }
     });
     client.on("error", (err: Error) => finish(err));
@@ -371,7 +365,10 @@ Deno.serve(async (req: Request) => {
     }
 
     const { data: mqttCfg } = await supabase.from("mqtt_config").select("*").limit(1).maybeSingle();
-    const messages = await collectSnapshot(mqttCfg as MqttConfig | null);
+    // A 12-second early exit used to miss the second station because healthy
+    // RTUs publish about every 19 seconds. Live fallback waits 30 seconds;
+    // persistent cron snapshots observe a wider 50-second multi-topic window.
+    const messages = await collectSnapshot(mqttCfg as MqttConfig | null, mode === "live" ? 30_000 : 50_000);
     if (messages.length === 0) throw new Error("No MQTT messages received during capture window");
 
     // Wall-clock-bucketed timestamp: floor to nearest 5-minute boundary

@@ -22,6 +22,17 @@ interface SyncLog {
   triggered_at: string;
 }
 
+interface SyncProof {
+  endpoint?: string;
+  status?: number | null;
+  response?: string;
+  duration_ms?: number | null;
+  freshness_minutes?: number;
+  included_stations?: string[];
+  skipped_stations?: string[];
+  source_latest_at?: Record<string, string>;
+}
+
 type ParamRow = { param: string; value: string; unit?: string; sensorId: string };
 
 const VENDOR_KEY = 'UADDORESREG022';
@@ -35,13 +46,30 @@ const DEVICES = [
   { key: 'oht4', id: 'MOH_OHT_004', label: 'OHT - 4 Ward No 10 200KL' },
 ] as const;
 
+const stationDeliveryFromPayload = (payload: unknown, key: string, deviceId: string) => {
+  if (!payload || typeof payload !== 'object') return { included: undefined, sourceAt: undefined };
+  const body = payload as Record<string, unknown>;
+  if (key === 'intake') {
+    const intake = body.intake as Record<string, unknown> | undefined;
+    return { included: !!intake, sourceAt: typeof intake?.recordDateTime === 'string' ? intake.recordDateTime : undefined };
+  }
+  const unit = Array.isArray(body.wtpUnits) ? body.wtpUnits[0] as Record<string, unknown> | undefined : undefined;
+  if (key === 'wtp') {
+    const wtp = unit?.wtp as Record<string, unknown> | undefined;
+    return { included: !!wtp, sourceAt: typeof wtp?.recordDateTime === 'string' ? wtp.recordDateTime : undefined };
+  }
+  const ohts = Array.isArray(unit?.ohts) ? unit.ohts as Record<string, unknown>[] : [];
+  const oht = ohts.find((item) => item.ohT_Device_id === deviceId);
+  return { included: !!oht, sourceAt: typeof oht?.recordDateTime === 'string' ? oht.recordDateTime : undefined };
+};
+
 const GisSyncStatus = () => {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [logs, setLogs] = useState<SyncLog[]>([]);
   const [logsLoaded, setLogsLoaded] = useState(false);
   const [lastPayload, setLastPayload] = useState<unknown>(null);
-  const [lastResponse, setLastResponse] = useState<unknown>(null);
+  const [lastResponse, setLastResponse] = useState<SyncProof | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [showJson, setShowJson] = useState(false);
   const { intakeTags, ohtTags, wtpTags } = useScada();
@@ -49,7 +77,7 @@ const GisSyncStatus = () => {
   const readLocal = () => {
     try {
       setLastPayload(JSON.parse(localStorage.getItem('gov_last_payload') || 'null'));
-      setLastResponse(JSON.parse(localStorage.getItem('gov_last_response') || 'null'));
+      setLastResponse(JSON.parse(localStorage.getItem('gov_last_response') || 'null') as SyncProof | null);
       setLastSyncAt(localStorage.getItem('gov_last_sync_at'));
     } catch { /* ignore */ }
   };
@@ -79,11 +107,12 @@ const GisSyncStatus = () => {
     try {
       const { data, error } = await supabase.functions.invoke('gis-sync');
       if (error) throw error;
-      const proof = (data as unknown)?.proof;
-      const ok = (data as unknown)?.success;
+      const result = data as { proof?: SyncProof; success?: boolean; request_payload?: unknown } | null;
+      const proof = result?.proof;
+      const ok = result?.success;
       if (ok) toast.success(`GIS sync OK (HTTP ${proof?.status})`);
       else toast.error(`GIS sync failed: HTTP ${proof?.status ?? 'n/a'}`);
-      localStorage.setItem('gov_last_payload', JSON.stringify((data as unknown).request_payload ?? null));
+      localStorage.setItem('gov_last_payload', JSON.stringify(result?.request_payload ?? null));
       localStorage.setItem('gov_last_response', JSON.stringify(proof ?? null));
       localStorage.setItem('gov_last_sync_at', new Date().toISOString());
       readLocal();
@@ -149,9 +178,12 @@ const GisSyncStatus = () => {
   const gatewayUnknown = !logsLoaded;
   const lastDuration = lastLog?.duration_ms ?? lastResponse?.duration_ms;
   const lastStatus = lastLog?.response_status ?? lastResponse?.status;
-  const lastTimeStr = lastSyncAt
-    ? new Date(lastSyncAt).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  const latestLogTime = lastLog?.triggered_at || lastSyncAt;
+  const lastTimeStr = latestLogTime
+    ? new Date(latestLogTime).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : '—';
+  const includedStations = lastResponse?.included_stations;
+  const skippedStations = lastResponse?.skipped_stations;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -256,21 +288,29 @@ const GisSyncStatus = () => {
             </div>
             <div className="overflow-x-auto pb-2 -mx-1 px-1">
               <div className="flex gap-3 min-w-min">
-                {DEVICES.map(d => (
-                  <StationCard
-                    key={d.key}
-                    label={d.label}
-                    deviceId={d.id}
-                    success={gatewayOk}
-                    unknown={gatewayUnknown}
-                    status={lastStatus}
-                    duration={lastDuration}
-                    timeStr={lastTimeStr}
-                    rows={live[d.key] || []}
-                    payload={lastPayload}
-                    responseText={lastLog?.response_body || lastResponse?.response}
-                  />
-                ))}
+                {DEVICES.map(d => {
+                  const delivery = stationDeliveryFromPayload(lastLog?.request_payload ?? lastPayload, d.key, d.id);
+                  const included = includedStations ? includedStations.includes(d.key) : delivery.included;
+                  const skipped = skippedStations ? skippedStations.includes(d.key) : included === false;
+                  return (
+                    <StationCard
+                      key={d.key}
+                      label={d.label}
+                      deviceId={d.id}
+                      success={gatewayOk}
+                      unknown={gatewayUnknown}
+                      status={lastStatus}
+                      duration={lastDuration}
+                      timeStr={lastTimeStr}
+                      rows={live[d.key] || []}
+                      payload={lastLog?.request_payload ?? lastPayload}
+                      responseText={lastLog?.response_body || lastResponse?.response}
+                      included={included}
+                      skipped={skipped}
+                      sourceAt={lastResponse?.source_latest_at?.[d.key] || delivery.sourceAt}
+                    />
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -360,10 +400,11 @@ const StatCard = ({ label, icon, value, accent }: {
   </div>
 );
 
-const StationCard = ({ label, deviceId, success, unknown: unknownProp, status, duration, timeStr, rows, payload, responseText }: {
+const StationCard = ({ label, deviceId, success, unknown: unknownProp, status, duration, timeStr, rows, payload, responseText, included, skipped, sourceAt }: {
   label: string; deviceId: string; success: boolean; unknown?: boolean;
   status?: number | null; duration?: number | null; timeStr: string;
   rows: ParamRow[]; payload: unknown; responseText?: string | null;
+  included?: boolean; skipped?: boolean; sourceAt?: string;
 }) => {
   const [showJson, setShowJson] = useState(false);
   const [showResp, setShowResp] = useState(false);
@@ -382,15 +423,15 @@ const StationCard = ({ label, deviceId, success, unknown: unknownProp, status, d
             </button>
           </div>
         </div>
-        <Badge className={`text-[9px] font-bold ${unknownProp ? 'bg-muted text-muted-foreground border-border' : success ? 'bg-success/15 text-success border-success/30' : 'bg-destructive/15 text-destructive border-destructive/30'}`}>
-          {unknownProp ? '…' : success ? 'SUCCESS' : 'FAILED'}
+        <Badge className={`text-[9px] font-bold ${unknownProp ? 'bg-muted text-muted-foreground border-border' : skipped ? 'bg-muted text-muted-foreground border-border' : success && included !== false ? 'bg-success/15 text-success border-success/30' : 'bg-destructive/15 text-destructive border-destructive/30'}`}>
+          {unknownProp ? '…' : skipped ? 'OFFLINE' : success && included !== false ? 'SENT' : 'FAILED'}
         </Badge>
       </div>
 
       <div className="px-3 py-2 border-b text-[10px] font-mono flex items-center justify-between gap-2 bg-background">
         <span><span className="text-muted-foreground">Code:</span> <b className={success ? 'text-success' : 'text-destructive'}>{status ?? '—'}</b></span>
         <span><span className="text-muted-foreground">Duration:</span> <b>{duration ?? '?'}ms</b></span>
-        <span><span className="text-muted-foreground">Time:</span> <b>{timeStr}</b></span>
+        <span><span className="text-muted-foreground">Data:</span> <b>{sourceAt ? new Date(sourceAt).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) : timeStr}</b></span>
       </div>
 
       <div className="px-3 py-2">

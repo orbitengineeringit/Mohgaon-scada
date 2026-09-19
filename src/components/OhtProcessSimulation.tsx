@@ -105,6 +105,7 @@ export interface OhtProcessSimulationProps {
 }
 
 const OhtProcessSimulation: React.FC<OhtProcessSimulationProps> = ({ sensors, tags, config }) => {
+  const { setOhtTags } = useScada();
   const getSensor = (key: string) => sensors.find(s => 
     s.mqttKey === key || 
     s.mqttKey.endsWith(`_${key}`) || 
@@ -129,6 +130,7 @@ const OhtProcessSimulation: React.FC<OhtProcessSimulationProps> = ({ sensors, ta
   const fOutTag = getTag('FLOW_OUT');
 
   const fcvTag = getTag('FCV');
+  const hasFcvSensor = sensors.some(s => s.instrumentType === 'fcv' && !s.notInstalled);
   const fcvVal = fcvTag?.value || 0;
   const fcvOpen = fcvVal > 0;
 
@@ -137,7 +139,6 @@ const OhtProcessSimulation: React.FC<OhtProcessSimulationProps> = ({ sensors, ta
 
   const ptVal = ptTag?.value || 0;
   const fInVal = fInTag?.value || 0;
-  const fOutVal = fOutTag?.value || 0;
   const totVal = totTag?.value || 0;
 
   const handleFcvToggle = () => {
@@ -307,13 +308,13 @@ const OhtProcessSimulation: React.FC<OhtProcessSimulationProps> = ({ sensors, ta
           {/* Inlet Pipe after FCV */}
           <g>
             {drawPipe(inPipeAfterFcv, pipeW)}
-            {fcvOpen && drawWaterFlow(inPipeAfterFcv, fInVal, fInVal > 0)}
+            {(!hasFcvSensor || fcvOpen) && drawWaterFlow(inPipeAfterFcv, fInVal, fInVal > 0)}
           </g>
 
           {/* Outlet Pipe */}
           <g>
             {drawPipe(outPipePath, pipeW)}
-            {drawWaterFlow(outPipePath, fOutTag?.value || 0, (fOutTag?.value || 0) > 0)}
+            {fOutTag && drawWaterFlow(outPipePath, fOutTag.value || 0, (fOutTag.value || 0) > 0)}
           </g>
 
           <g>
@@ -483,11 +484,11 @@ const OhtProcessSimulation: React.FC<OhtProcessSimulationProps> = ({ sensors, ta
           <g>
             <path d={`M 500 ${pillarY + pillarH} L 500 ${pillarY + pillarH - 40}`} fill="none" stroke="#475569" strokeWidth="6" />
             <circle cx={500} cy={pillarY + pillarH} r="6" fill="#475569" />
-            <CircularGauge cx={500} cy={pillarY + pillarH - 100} r={55} value={ptVal} min={0} max={10} label="PT Inlet" unit="Bar" />
+            <CircularGauge cx={500} cy={pillarY + pillarH - 100} r={55} value={ptVal} min={0} max={ptTag?.max ?? 10} label="PT Inlet" unit="Bar" />
           </g>
 
           {/* Flow Control Valve (FCV) on Inlet Pipe - Right side of PT Inlet */}
-          <g cursor="pointer" onClick={handleFcvToggle} className="select-none">
+          {hasFcvSensor && <g cursor="pointer" onClick={handleFcvToggle} className="select-none">
             {/* Label */}
             <text x={660} y={305} textAnchor="middle" className="fill-foreground font-bold text-sm" letterSpacing="0.5px">FCV</text>
             <text x={660} y={320} textAnchor="middle" className="fill-muted-foreground font-medium text-[11px]">Flow Control Valve</text>
@@ -552,7 +553,7 @@ const OhtProcessSimulation: React.FC<OhtProcessSimulationProps> = ({ sensors, ta
 
             {/* Tap to Toggle Text */}
             <text x={660} y={510} textAnchor="middle" fontSize="10" fill="hsl(var(--muted-foreground))" fontWeight="600" className="animate-pulse">Tap to toggle</text>
-          </g>
+          </g>}
 
         </svg>
       </div>

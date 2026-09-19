@@ -55,7 +55,12 @@ const INTERVAL_LABEL: Record<ExportInterval, string> = {
 };
 
 // Sensors not installed at Mohgaon plant (e.g. Mohgaon WTP only has 2 HT Pumps: WTP-Pump1 & WTP-Pump2)
-const UNINSTALLED_TAG_IDS = ['WTP-Pump3', 'WTP-Pump4', 'WTP-PT3', 'WTP-PT4', 'WTP-CombinedPT1', 'WTP-CombinedPT2', 'WTP-KW', 'INT-KW'];
+const UNINSTALLED_TAG_IDS = [
+  'WTP-Pump3', 'WTP-Pump4', 'WTP-PT3', 'WTP-PT4', 'WTP-CombinedPT1', 'WTP-CombinedPT2', 'WTP-KW', 'INT-KW',
+  'OHT1-Flow-OUT', 'OHT1-FCV', 'OHT2-Flow-OUT', 'OHT2-FCV',
+  'OHT3-Flow-OUT', 'OHT3-FCV', 'OHT3-EFM1-1', 'OHT3-EFM2-1', 'OHT3-EFM2-2',
+  'OHT4-Flow-OUT', 'OHT4-FCV',
+];
 const UNINSTALLED_TAGS_FILTER = `("${UNINSTALLED_TAG_IDS.join('","')}")`;
 
 /** Derive a sub-section label like OHT-1 / OHT-2 / OHT-3 from a tag_id (e.g. "OHT1-LT"). */

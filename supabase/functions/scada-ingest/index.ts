@@ -64,22 +64,12 @@ const ohtSensors = (n: number): Sensor[] => {
   const prefix = `OHT${n}`;
   const subsection = `OHT-${n}`;
   const isLiveOht3 = n === 3;
-  const sensors: Sensor[] = [
+  return [
     { id: `${prefix}-PT`, mqttKey: isLiveOht3 ? "PT" : "PT_01", label: "Pressure (PT)", unit: "Bar", min: 0, max: isLiveOht3 ? 16 : 10, section: "oht", subsection, instrumentType: "pt" },
     { id: `${prefix}-LT`, mqttKey: isLiveOht3 ? "LT" : "LEVEL", label: "Level (LT)", unit: "%", min: 0, max: 100, section: "oht", subsection, instrumentType: "lt" },
     { id: `${prefix}-Flow-IN`, mqttKey: isLiveOht3 ? "EFM_FLOW" : "FLOW", label: "Flow Meter (Inlet)", unit: "m³/hr", min: 0, max: 50, section: "oht", subsection, instrumentType: "flow" },
-    { id: `${prefix}-Flow-OUT`, mqttKey: isLiveOht3 ? "EFM_FLOW_2" : "FLOW_OUT", label: "Flow Meter (Outlet)", unit: "m³/hr", min: 0, max: 50, section: "oht", subsection, instrumentType: "flow" },
-    { id: `${prefix}-FCV`, mqttKey: "FCV", label: "Flow Control Valve", unit: "%", min: 0, max: 100, section: "oht", subsection, instrumentType: "fcv" },
     { id: `${prefix}-Totalizer`, mqttKey: isLiveOht3 ? "EFM_1_2" : "TOTALIZER", label: isLiveOht3 ? "EFM 1 Totalizer 2" : "Totalizer", unit: "m³", min: isLiveOht3 ? -999999 : 0, max: 999999, section: "oht", subsection, instrumentType: "totalizer" },
   ];
-  if (isLiveOht3) {
-    sensors.push(
-      { id: "OHT3-EFM1-1", mqttKey: "EFM_1_1", label: "EFM 1 Totalizer 1", unit: "m³", min: -999999, max: 999999, section: "oht", subsection, instrumentType: "totalizer" },
-      { id: "OHT3-EFM2-1", mqttKey: "EFM_2_1", label: "EFM 2 Totalizer 1", unit: "m³", min: -999999, max: 999999, section: "oht", subsection, instrumentType: "totalizer" },
-      { id: "OHT3-EFM2-2", mqttKey: "EFM_2_2", label: "EFM 2 Totalizer 2", unit: "m³", min: -999999, max: 999999, section: "oht", subsection, instrumentType: "totalizer" },
-    );
-  }
-  return sensors;
 };
 
 const SENSORS: Sensor[] = [

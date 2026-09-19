@@ -4,7 +4,7 @@
  * MQTT topic paths are loaded securely from the database at runtime.
  * Only topic keys (OHT1, OHT2, OHT3, INTAKE, WTP) are defined here.
  * 
- * OHT (×4): PT, Level, Flow In, Flow Out, FCV/EFM counters as installed
+ * OHT (×4): Inlet PT, Level, Inlet Flow, Totalizer
  * Intake: PT1, PT2, CombinedPT, Level, Flow, Totalizer (computed), KW (not installed), Pump1, Pump2 (derived from PT)
  * WTP: PT1-PT4, CombinedPT1, CombinedPT2, LT_BW, LT_CW, Flow_IN, Flow_OUT, Totalizer (computed),
  *       PH_IN, TA_IN (Inlet analyzers - installed), PH, CL, TA, KW (not installed), Pump1-Pump4 (derived from PT)
@@ -29,28 +29,19 @@ export interface MohgaonSensor {
 }
 
 // ==================== OHT SENSORS ====================
-// Each OHT has: PT, Level, Flow In, Flow Out, FCV, Totalizer.
-// OHT-3 uses the current Mohgaon RTU schema with two EFMs and four counters.
+// Operator-facing model: every OHT has exactly four installed instruments.
+// OHT-3 publishes extra raw EFM registers, but only EFM_FLOW and EFM_1_2 are
+// the commissioned inlet flow and totalizer signals used by this SCADA.
 const createOhtSensors = (ohtNum: number): MohgaonSensor[] => {
   const prefix = `OHT${ohtNum}`;
   const sub = `OHT-${ohtNum}`;
   const isLiveOht3 = ohtNum === 3;
-  const sensors: MohgaonSensor[] = [
+  return [
     { id: `${prefix}-PT`, mqttKey: isLiveOht3 ? 'PT' : `${prefix}_PT`, label: 'Pressure (PT)', unit: 'Bar', min: 0, max: isLiveOht3 ? 16 : 10, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'pt' },
     { id: `${prefix}-LT`, mqttKey: isLiveOht3 ? 'LT' : `${prefix}_LT`, label: 'Level (LT)', unit: '%', min: 0, max: 100, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'lt' },
     { id: `${prefix}-Flow-IN`, mqttKey: isLiveOht3 ? 'EFM_FLOW' : `${prefix}_FLOW`, label: 'Flow Meter (Inlet)', unit: 'm³/hr', min: 0, max: 50, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'flow' },
-    { id: `${prefix}-Flow-OUT`, mqttKey: isLiveOht3 ? 'EFM_FLOW_2' : `${prefix}_FLOW_OUT`, label: 'Flow Meter (Outlet)', unit: 'm³/hr', min: 0, max: 50, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'flow', notInstalled: !isLiveOht3 },
-    { id: `${prefix}-FCV`, mqttKey: `${prefix}_FCV`, label: 'Flow Control Valve', unit: '%', min: 0, max: 100, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'fcv', notInstalled: true },
     { id: `${prefix}-Totalizer`, mqttKey: isLiveOht3 ? 'EFM_1_2' : `${prefix}_TOT`, label: isLiveOht3 ? 'EFM 1 Totalizer 2' : 'Totalizer', unit: 'm³', min: isLiveOht3 ? -999999 : 0, max: 999999, section: 'oht', subsection: sub, type: 'totalizer', instrumentType: 'totalizer' },
   ];
-  if (isLiveOht3) {
-    sensors.push(
-      { id: 'OHT3-EFM1-1', mqttKey: 'EFM_1_1', label: 'EFM 1 Totalizer 1', unit: 'm³', min: -999999, max: 999999, section: 'oht', subsection: sub, type: 'totalizer', instrumentType: 'totalizer' },
-      { id: 'OHT3-EFM2-1', mqttKey: 'EFM_2_1', label: 'EFM 2 Totalizer 1', unit: 'm³', min: -999999, max: 999999, section: 'oht', subsection: sub, type: 'totalizer', instrumentType: 'totalizer' },
-      { id: 'OHT3-EFM2-2', mqttKey: 'EFM_2_2', label: 'EFM 2 Totalizer 2', unit: 'm³', min: -999999, max: 999999, section: 'oht', subsection: sub, type: 'totalizer', instrumentType: 'totalizer' },
-    );
-  }
-  return sensors;
 };
 
 export const OHT1_SENSORS = createOhtSensors(1);
@@ -209,12 +200,12 @@ export const getPumpSensors = (section: SectionType): MohgaonSensor[] => {
 
 // Valid MQTT keys per section (supports canonical names + legacy aliases)
 export const VALID_OHT_KEYS = [
-  'OHT1_LT', 'OHT1_FLOW', 'OHT1_FLOW_OUT', 'OHT1_TOT', 'OHT1_PT', 'OHT1_FCV',
-  'OHT2_LT', 'OHT2_FLOW', 'OHT2_FLOW_OUT', 'OHT2_TOT', 'OHT2_PT', 'OHT2_FCV',
-  'OHT3_LT', 'OHT3_FLOW', 'OHT3_FLOW_OUT', 'OHT3_TOT', 'OHT3_PT', 'OHT3_FCV',
-  'OHT4_LT', 'OHT4_FLOW', 'OHT4_FLOW_OUT', 'OHT4_TOT', 'OHT4_PT', 'OHT4_FCV',
-  'PT', 'PT_01', 'LT', 'LEVEL', 'Level', 'FLOW', 'Flow', 'FLOW_IN', 'FLOW_OUT', 'FCV', 'TOTALIZER',
-  'EFM_FLOW', 'EFM_FLOW_2', 'EFM_1_1', 'EFM_1_2', 'EFM_2_1', 'EFM_2_2'
+  'OHT1_LT', 'OHT1_FLOW', 'OHT1_TOT', 'OHT1_PT',
+  'OHT2_LT', 'OHT2_FLOW', 'OHT2_TOT', 'OHT2_PT',
+  'OHT3_LT', 'OHT3_FLOW', 'OHT3_TOT', 'OHT3_PT',
+  'OHT4_LT', 'OHT4_FLOW', 'OHT4_TOT', 'OHT4_PT',
+  'PT', 'PT_01', 'LT', 'LEVEL', 'Level', 'FLOW', 'Flow', 'FLOW_IN', 'TOTALIZER',
+  'EFM_FLOW', 'EFM_1_2'
 ];
 
 export const VALID_INTAKE_KEYS = [

@@ -39,7 +39,7 @@ const VALID_RANGE: Record<string, { min: number; max: number }> = {
   "WTP-LT-BW": { min: 0, max: 100 }, "WTP-HeaderPT": { min: 0, max: 10 },
   "WTP-PT1": { min: 0, max: 10 }, "WTP-PT2": { min: 0, max: 10 },
   ...Object.fromEntries([1, 2, 3, 4].flatMap((n) => [
-    [`OHT${n}-PT`, { min: 0, max: 10 }],
+    [`OHT${n}-PT`, { min: 0, max: n === 3 ? 16 : 10 }],
     [`OHT${n}-LT`, { min: 0, max: 100 }],
     [`OHT${n}-Flow-IN`, { min: 0, max: 50 }],
   ])),
@@ -224,6 +224,13 @@ Deno.serve(async (req) => {
         .sort((a, b) => Date.parse(b) - Date.parse(a));
       return timestamps[0];
     };
+    const stationLastSeenTimestamp = (ids: string[]): string | undefined => {
+      const timestamps = ids
+        .map((id) => latest.get(id)?.timestamp)
+        .filter((timestamp): timestamp is string => !!timestamp && Number.isFinite(Date.parse(timestamp)))
+        .sort((a, b) => Date.parse(b) - Date.parse(a));
+      return timestamps[0];
+    };
     const hasFreshData = (ids: string[]) => !!stationTimestamp(ids);
 
     // 3) Build payload
@@ -250,9 +257,14 @@ Deno.serve(async (req) => {
     } else {
       skippedStations.push("intake");
       // Garud's contract requires both properties even when the Intake RTU is
-      // offline. Send only its identity and an empty pump collection: no stale
-      // readings, zero substitutes, or fabricated recordDateTime.
-      requestPayload.intake = { intakWell_Device_id: cfg.intake_device_id };
+      // offline. Send only its identity and honest last-seen timestamp: no
+      // stale sensor values, zero substitutes, or fabricated current time.
+      const lastSeenAt = stationLastSeenTimestamp(intakeIds);
+      if (!lastSeenAt) throw new Error("Garud requires Intake.RecordDateTime but Intake has never supplied telemetry");
+      requestPayload.intake = {
+        intakWell_Device_id: cfg.intake_device_id,
+        recordDateTime: toIstString(lastSeenAt),
+      };
       requestPayload.intakePumps = [];
     }
 
@@ -305,8 +317,14 @@ Deno.serve(async (req) => {
     } else {
       skippedStations.push("wtp");
       // Keep the required WTP envelope without pretending that old telemetry
-      // is current. Garud receives no process values or fabricated timestamp.
-      wtpUnit.wtp = { wtP_Device_id: cfg.wtp_device_id };
+      // is current. Garud receives no process values and only the honest
+      // last-seen timestamp required by its contract.
+      const lastSeenAt = stationLastSeenTimestamp(wtpIds);
+      if (!lastSeenAt) throw new Error("Garud requires WTP.RecordDateTime but WTP has never supplied telemetry");
+      wtpUnit.wtp = {
+        wtP_Device_id: cfg.wtp_device_id,
+        recordDateTime: toIstString(lastSeenAt),
+      };
       wtpUnit.pumps = [];
     }
     // The Garud contract requires the collection even when every OHT is offline.

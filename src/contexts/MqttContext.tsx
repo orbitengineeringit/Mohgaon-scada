@@ -251,14 +251,14 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
       }
     }
 
-    if (topic.includes('OHT') || topic.includes('Ov1h') || topic.includes('Ov2h') || topic.includes('Ov3h') || topic.includes('Ov4h')) {
+    if (topic.toLowerCase().includes('oht') || topic.includes('Ov1h') || topic.includes('Ov2h') || topic.includes('Ov3h') || topic.includes('Ov4h')) {
       if (topic.includes('OHT01') || topic.includes('OHT-1') || topic.includes('OHT1') || topic.includes('Ov1h')) {
         return { section: 'oht', subsection: 'OHT-1' };
       }
       if (topic.includes('OHT02') || topic.includes('OHT-2') || topic.includes('OHT2') || topic.includes('Ov2h')) {
         return { section: 'oht', subsection: 'OHT-2' };
       }
-      if (topic.includes('OHT03') || topic.includes('OHT-3') || topic.includes('OHT3') || topic.includes('Ov3h')) {
+      if (topic.includes('OHT03') || topic.includes('OHT-3') || topic.includes('OHT3') || topic.toLowerCase().includes('oht-3') || topic.includes('Ov3h')) {
         return { section: 'oht', subsection: 'OHT-3' };
       }
       if (topic.includes('OHT04') || topic.includes('OHT-4') || topic.includes('OHT4') || topic.includes('Ov4h')) {

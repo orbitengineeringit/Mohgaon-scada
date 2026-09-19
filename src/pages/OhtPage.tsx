@@ -117,13 +117,13 @@ const OhtPage: React.FC = () => {
     {
       title: 'OHT - 3 Ward No 06 200KL', label: '#3', color: 'bg-success', colorHsl: '142 71% 45%',
       borderColor: 'border-success/20', bgColor: 'bg-success/[0.03]', iconBg: 'bg-success/10',
-      sensors: OHT3_SENSORS, startIndex: 12, capacity: '6 instruments • PT, LT, Flow In, Flow Out, FCV, Totalizer',
+      sensors: OHT3_SENSORS, startIndex: 12, capacity: '9 instruments • PT, LT, 2 Flow Meters, 4 EFM Counters',
       groupKey: 'oht-3',
     },
     {
       title: 'OHT - 4 Ward No 10 200KL', label: '#4', color: 'bg-indigo-500', colorHsl: '271 91% 65%',
       borderColor: 'border-indigo-500/20', bgColor: 'bg-indigo-500/[0.03]', iconBg: 'bg-indigo-500/10',
-      sensors: OHT4_SENSORS, startIndex: 18, capacity: '6 instruments • PT, LT, Flow In, Flow Out, FCV, Totalizer',
+      sensors: OHT4_SENSORS, startIndex: 21, capacity: '6 instruments • PT, LT, Flow In, Flow Out, FCV, Totalizer',
       groupKey: 'oht-4',
     },
   ];

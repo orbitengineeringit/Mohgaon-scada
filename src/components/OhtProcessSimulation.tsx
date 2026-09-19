@@ -110,7 +110,8 @@ const OhtProcessSimulation: React.FC<OhtProcessSimulationProps> = ({ sensors, ta
     s.mqttKey.endsWith(`_${key}`) || 
     s.instrumentType === key.toLowerCase() || 
     (key === 'PT_01' && s.instrumentType === 'pt') ||
-    (key === 'FLOW' && s.instrumentType === 'flow') ||
+    (key === 'FLOW' && s.id.endsWith('-Flow-IN')) ||
+    (key === 'FLOW_OUT' && s.id.endsWith('-Flow-OUT')) ||
     (key === 'LEVEL' && s.instrumentType === 'lt')
   );
   const getTag = (key: string) => {

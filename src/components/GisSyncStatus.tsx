@@ -51,13 +51,17 @@ const stationDeliveryFromPayload = (payload: unknown, key: string, deviceId: str
   if (key === 'intake') {
     const intake = body.intake as Record<string, unknown> | undefined;
     const sourceAt = typeof intake?.recordDateTime === 'string' ? intake.recordDateTime : undefined;
-    return { included: !!sourceAt, sourceAt };
+    const included = !!intake && ['intakeWellLevel_mtr', 'outletFlow_mld', 'headerActualPressure']
+      .some(field => typeof intake[field] === 'number');
+    return { included, sourceAt };
   }
   const unit = Array.isArray(body.wtpUnits) ? body.wtpUnits[0] as Record<string, unknown> | undefined : undefined;
   if (key === 'wtp') {
     const wtp = unit?.wtp as Record<string, unknown> | undefined;
     const sourceAt = typeof wtp?.recordDateTime === 'string' ? wtp.recordDateTime : undefined;
-    return { included: !!sourceAt, sourceAt };
+    const included = !!wtp && ['inletFlow_mld', 'outletFlow_mld', 'rawPh', 'treatedPh', 'cwrLevel', 'backwashLevel']
+      .some(field => typeof wtp[field] === 'number');
+    return { included, sourceAt };
   }
   const ohts = Array.isArray(unit?.ohts) ? unit.ohts as Record<string, unknown>[] : [];
   const oht = ohts.find((item) => item.ohT_Device_id === deviceId);
@@ -460,7 +464,7 @@ const StationCard = ({ label, deviceId, success, unknown: unknownProp, status, d
       <div className="px-3 py-2 border-b text-[10px] font-mono flex items-center justify-between gap-2 bg-background">
         <span><span className="text-muted-foreground">Code:</span> <b className={skipped ? 'text-muted-foreground' : success ? 'text-success' : 'text-destructive'}>{skipped ? '—' : status ?? '—'}</b></span>
         <span><span className="text-muted-foreground">Duration:</span> <b>{skipped ? '—' : duration != null ? `${duration}ms` : '—'}</b></span>
-        <span><span className="text-muted-foreground">Data:</span> <b>{sourceAt ? new Date(sourceAt).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) : skipped ? '—' : timeStr}</b></span>
+        <span><span className="text-muted-foreground">{skipped ? 'Last seen:' : 'Data:'}</span> <b>{sourceAt ? new Date(sourceAt).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) : skipped ? '—' : timeStr}</b></span>
       </div>
 
       <div className="px-3 py-2">

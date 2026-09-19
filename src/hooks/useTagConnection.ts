@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { TagData } from '@/contexts/ScadaContext';
+import { TELEMETRY_LIVE_MS, TELEMETRY_OFFLINE_MS, telemetryAgeMs } from '@/lib/telemetryQuality';
 
 /**
  * Single source of truth for sensor status indicator state across the dashboard.
@@ -9,25 +10,15 @@ import type { TagData } from '@/contexts/ScadaContext';
  *  - 'inactive'  : Active communication (value is exactly 0.0).
  *  - 'no-data'   : Disconnected / Timeout (no data received).
  */
-export type ConnectionState = 'connected' | 'no-data' | 'inactive' | 'stale';
+export type ConnectionState = 'connected' | 'no-data' | 'inactive' | 'stale' | 'fault';
 
 export const getTagConnection = (tag?: TagData | null): ConnectionState => {
   if (!tag) return 'no-data';
-  
-  if (tag.status === 'disconnected') return 'no-data';
-  
-  if (tag.lastDataTime) {
-    const elapsed = Date.now() - new Date(tag.lastDataTime).getTime();
-    
-    // Dynamic disconnect timeout based on section:
-    // ~18-20s measured RTU interval — use 4× safety margin
-    // WTP: 80s, Intake: 80s, OHT: 90s
-    const timeout = tag.section === 'intake' ? 80000 : tag.section === 'oht' ? 90000 : 80000;
-    
-    if (elapsed > timeout) return 'no-data';
-  } else {
-    return 'no-data';
-  }
+
+  const elapsed = telemetryAgeMs(tag);
+  if (elapsed === null || elapsed > TELEMETRY_OFFLINE_MS || tag.status === 'disconnected') return 'no-data';
+  if (tag.status === 'fault') return 'fault';
+  if (elapsed > TELEMETRY_LIVE_MS) return 'stale';
   
   // When live telemetry is arriving within timeout, determine active state:
   // - Pumps: value=0 means pump is OFF (normal operation) — show 'connected' so pump card handles ON/OFF display

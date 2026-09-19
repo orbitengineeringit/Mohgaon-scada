@@ -197,6 +197,9 @@ function parsePayload(payload: string): Record<string, string | number>[] {
       if (Array.isArray(rData)) {
         rData.forEach((item: any) => {
           if (item && typeof item === "object") {
+            // PLC/RTU explicitly reports sensor quality in `err`. Never turn a
+            // known bad instrument reading into live or historical data.
+            if (item.err !== undefined && String(item.err) !== "0") return;
             const keyName = item.name ?? item.tag ?? item.key;
             const val = item.value ?? item.val;
             if (keyName !== undefined && val !== undefined) {
@@ -345,6 +348,16 @@ Deno.serve(async (req: Request) => {
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
   try {
+    let mode: "snapshot" | "live" = "snapshot";
+    if (req.method === "POST") {
+      try {
+        const body = await req.json();
+        if (body?.mode === "live") mode = "live";
+      } catch {
+        // pg_cron sends an empty body; that is the normal persistent snapshot.
+      }
+    }
+
     const { data: cfgRow } = await supabase.from("gis_config").select("cron_secret").order("created_at", { ascending: false }).limit(1).maybeSingle();
     const apiKey = req.headers.get("apikey");
     const authHeader = req.headers.get("Authorization");
@@ -367,7 +380,7 @@ Deno.serve(async (req: Request) => {
     const SNAPSHOT_INTERVAL_MS = 5 * 60 * 1000;
     const alignedTs = new Date(Math.floor(Date.now() / SNAPSHOT_INTERVAL_MS) * SNAPSHOT_INTERVAL_MS).toISOString();
 
-    const byTag = new Map<string, { sensor: Sensor; value: number; topic: string; at: string }>();
+    const byTag = new Map<string, { sensor: Sensor; value: number; topic: string; at: string; receivedAt: string }>();
     for (const msg of messages) {
       if (msg.section === "unknown") continue;
       const sensors = SENSORS.filter(s => s.section === msg.section && (!s.subsection || s.subsection === msg.subsection) && s.mqttKey);
@@ -381,16 +394,60 @@ Deno.serve(async (req: Request) => {
         if ((mqttKey === 'RAW_EFM_FLOW' || mqttKey === 'CLR_EFM_FLOW') && sensor.unit === 'm³/hr') {
           value = value / 1000;
         }
-        const cleanValue = value < 0 ? 0 : value;
+        // Engineering ranges are hard quality limits. For example BW_LT is
+        // physically 0..100%; 100.886 is a fault, not a value to clamp/save.
+        if (value < sensor.min || value > sensor.max) {
+          console.warn(`Rejected out-of-range reading ${sensor.id}=${value} (valid ${sensor.min}..${sensor.max})`);
+          continue;
+        }
+        const cleanValue = value;
         // Use aligned timestamp instead of raw MQTT message time
-        byTag.set(`${sensor.section}-${sensor.id}`, { sensor, value: cleanValue, topic: msg.topic, at: alignedTs });
+        byTag.set(`${sensor.section}-${sensor.id}`, {
+          sensor,
+          value: cleanValue,
+          topic: msg.topic,
+          at: alignedTs,
+          receivedAt: msg.timestamp.toISOString(),
+        });
 
         const pumpId = PT_TO_PUMP[sensor.id];
         if (pumpId) {
           const pump = SENSORS.find(s => s.id === pumpId && s.section === sensor.section);
-          if (pump) byTag.set(`${pump.section}-${pump.id}`, { sensor: pump, value: cleanValue > 1.5 ? 1 : 0, topic: msg.topic, at: alignedTs });
+          if (pump) byTag.set(`${pump.section}-${pump.id}`, {
+            sensor: pump,
+            value: cleanValue > 1.5 ? 1 : 0,
+            topic: msg.topic,
+            at: alignedTs,
+            receivedAt: msg.timestamp.toISOString(),
+          });
         }
       }
+    }
+
+    const buildTelemetry = () => {
+      const telemetry: Record<string, { value: number; timestamp: string; section: string }> = {};
+      for (const entry of Array.from(byTag.values())) {
+        telemetry[entry.sensor.id] = {
+          value: entry.value,
+          timestamp: entry.receivedAt,
+          section: entry.sensor.section,
+        };
+      }
+      return telemetry;
+    };
+
+    // Browser fallback requests are read-only. Only pg_cron owns the aligned
+    // 5-minute historian snapshots, so opening several dashboards cannot create
+    // duplicate history rows.
+    if (mode === "live") {
+      return new Response(JSON.stringify({
+        success: true,
+        mode,
+        saved_count: 0,
+        received_topics: Array.from(new Set(messages.map(m => m.topic))).length,
+        duration_ms: Date.now() - started,
+        telemetry: buildTelemetry(),
+      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const tagRows = Array.from(byTag.values()).map(({ sensor }) => ({
@@ -439,6 +496,7 @@ Deno.serve(async (req: Request) => {
         timestamp: at,
         source: "backend:5min",
         mqtt_topic: topic,
+        snapshot_key: `${sensor.section}:${sensor.id}:${at}`,
       }));
 
     // FIX 2: Per-section bucket guard — check each section independently.
@@ -456,7 +514,9 @@ Deno.serve(async (req: Request) => {
 
     if (logsToSave.length > 0) {
       console.log(`Inserting ${logsToSave.length} historian records for 5-min snapshot at ${alignedTs} (sections: ${[...new Set(logsToSave.map(l => l.section))].join(", ")})`);
-      const { error: insertErr } = await supabase.from("historian_logs").insert(logsToSave);
+      const { error: insertErr } = await supabase
+        .from("historian_logs")
+        .upsert(logsToSave, { onConflict: "snapshot_key", ignoreDuplicates: true });
       if (insertErr) console.error(`historian insert failed: ${insertErr.message}`);
     } else {
       console.log(`Live sync: All sections already saved for bucket ${alignedTs}. Returning live telemetry in-memory.`);
@@ -525,21 +585,13 @@ Deno.serve(async (req: Request) => {
     });
     if (rpcErr) console.warn("Consumption refresh failed:", rpcErr.message);
 
-    const latestTelemetry: Record<string, { value: number; timestamp: string; section: string }> = {};
-    for (const entry of Array.from(byTag.values())) {
-      latestTelemetry[entry.sensor.id] = {
-        value: entry.value,
-        timestamp: entry.at,
-        section: entry.sensor.section,
-      };
-    }
-
     return new Response(JSON.stringify({
       success: true,
-      saved_count: logs.length,
+      mode,
+      saved_count: logsToSave.length,
       received_topics: Array.from(new Set(messages.map(m => m.topic))).length,
       duration_ms: Date.now() - started,
-      telemetry: latestTelemetry,
+      telemetry: buildTelemetry(),
     }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (err) {
     console.error("scada-ingest failed", err);

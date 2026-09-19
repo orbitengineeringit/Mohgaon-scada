@@ -10,6 +10,7 @@ import {
   VALID_OHT_KEYS, VALID_INTAKE_KEYS, VALID_WTP_KEYS,
   MohgaonSensor, PT_TO_PUMP_MAP,
 } from '@/config/mohgaonSensors';
+import { isValueWithinEngineeringRange, TELEMETRY_OFFLINE_MS } from '@/lib/telemetryQuality';
 
 interface TagUpdate {
   tagId: string;
@@ -140,14 +141,15 @@ export const useMqttTagSync = (
       const nowTime = now.getTime();
       
       // Check for Central Gateway Offline isolation (TDM Layer 2)
-      // Grace period = 120s (4× RTU interval) to avoid false alerts from network jitter
+      // Cellular links can pause for several minutes and then deliver a burst.
+      // Declare the gateway offline only after the shared hard timeout.
       const intakeLast = lastMessageTime.current.get('intake') || 0;
       const wtpLast = lastMessageTime.current.get('wtp') || 0;
       const ohtLast = lastMessageTime.current.get('oht') || 0;
 
-      const isGatewayOffline = (intakeLast > 0 && nowTime - intakeLast > 120000) &&
-                               (wtpLast > 0 && nowTime - wtpLast > 120000) &&
-                               (ohtLast > 0 && nowTime - ohtLast > 120000);
+      const isGatewayOffline = (intakeLast > 0 && nowTime - intakeLast > TELEMETRY_OFFLINE_MS) &&
+                               (wtpLast > 0 && nowTime - wtpLast > TELEMETRY_OFFLINE_MS) &&
+                               (ohtLast > 0 && nowTime - ohtLast > TELEMETRY_OFFLINE_MS);
 
       if (isGatewayOffline) {
         const gwKey = 'SCADA-Gateway-Offline';
@@ -183,16 +185,13 @@ export const useMqttTagSync = (
       // Clear gateway offline once network is restored
       alarmActiveSince.current.delete('SCADA-Gateway-Offline');
 
-      // Individual watchdog timeouts calibrated for ~30s RTU telemetry interval
-      // Grace margins: 2.5× RTU interval for WTP/Intake, 3× for OHT (longer GSM round-trip)
-      // This prevents false-disconnect alarms from normal network jitter.
+      // The UI shows an amber delayed state after 2 minutes. Only this hard
+      // timeout changes the tag to offline and raises a disconnect alarm.
       const checkTags = (setter: React.Dispatch<React.SetStateAction<TagData[]>>) => {
         setter(prev => prev.map(tag => {
           if (tag.source === 'mqtt' && tag.lastDataTime) {
             const elapsed = nowTime - tag.lastDataTime.getTime();
-            // WTP & Intake: 75s (2.5× 30s interval), OHT: 90s (3× 30s interval)
-            const timeout = tag.section === 'wtp' ? 75000 : tag.section === 'intake' ? 75000 : 90000;
-            if (elapsed > timeout && tag.status !== 'disconnected') {
+            if (elapsed > TELEMETRY_OFFLINE_MS && tag.status !== 'disconnected') {
               const msg = `Communication Loss: ${tag.label} (${tag.id}) is offline (No cellular GPRS data for ${Math.round(elapsed / 1000)}s)`;
               addAlarm({
                 tagId: tag.id,
@@ -405,21 +404,16 @@ export const useMqttTagSync = (
         validatedValue === 65535 || 
         validatedValue > 1e10
       );
-      const isCorrupt = isNaNOrInfinite || isNegativeOverflow || isPositiveOverflow;
+      const isOutsideEngineeringRange = !isNaNOrInfinite && !isValueWithinEngineeringRange(validatedValue, sensor);
+      const isCorrupt = isNaNOrInfinite || isNegativeOverflow || isPositiveOverflow || isOutsideEngineeringRange;
 
       if (isCorrupt) {
-        pendingLogs.current.push({
-          tagId: sensorId, value: null,
-          section: section as 'oht' | 'intake' | 'wtp',
-          topic, reason: 'alarm',
-        });
-
         const faultKey = `${sensorId}-SignalFault`;
         const faultStart = alarmActiveSince.current.get(faultKey);
         if (!faultStart) {
           alarmActiveSince.current.set(faultKey, nowTime);
         } else if (nowTime - faultStart > 30000) {
-          const type = isNegativeOverflow ? 'Sensor Wire Break' : 'Signal Overflow';
+          const type = isNegativeOverflow ? 'Sensor Wire Break' : isOutsideEngineeringRange ? 'Out of Engineering Range' : 'Signal Overflow';
           const msg = `Sensor Fault: ${sensor.label} (${sensorId}) is reading corrupt value: ${value}. (${type})`;
           addAlarm({
             tagId: sensorId, tagConfigId: existingTag?.dbId, label: sensor.label,
@@ -427,6 +421,12 @@ export const useMqttTagSync = (
             section: section as 'intake' | 'oht' | 'wtp',
           });
         }
+        // Keep the last valid value visible, but explicitly mark this sensor as
+        // faulty. Invalid readings are never written to history or sent onward.
+        const receivedAt = message.timestamp instanceof Date ? message.timestamp : new Date();
+        setter(prev => prev.map(t => t.id === sensorId
+          ? { ...t, status: 'fault' as const, lastDataTime: receivedAt, mqttTopic: topic, source: 'mqtt' as const }
+          : t));
         continue;
       }
 
@@ -644,18 +644,19 @@ export const useMqttTagSync = (
       }
 
       // Update local state atomically for live UI rendering
+      const receivedAt = message.timestamp instanceof Date ? message.timestamp : new Date();
       setter(prev => {
         return prev.map(t => {
           if (t.id === sensorId) {
             return {
-              ...t, value: displayValue, timestamp: new Date(), source: 'mqtt' as const,
-              mqttTopic: topic, isActive: true, lastDataTime: new Date(), status: 'connected' as const
+              ...t, value: displayValue, timestamp: receivedAt, source: 'mqtt' as const,
+              mqttTopic: topic, isActive: true, lastDataTime: receivedAt, status: 'connected' as const
             };
           }
           if (pumpId && t.id === pumpId && pumpValue !== null) {
             return {
-              ...t, value: pumpValue, timestamp: new Date(), source: 'mqtt' as const,
-              mqttTopic: topic, isActive: true, lastDataTime: new Date(), status: 'connected' as const
+              ...t, value: pumpValue, timestamp: receivedAt, source: 'mqtt' as const,
+              mqttTopic: topic, isActive: true, lastDataTime: receivedAt, status: 'connected' as const
             };
           }
           return t;

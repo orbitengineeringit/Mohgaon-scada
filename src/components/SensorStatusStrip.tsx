@@ -50,6 +50,18 @@ const SensorStatusStrip: React.FC<SensorStatusStripProps> = ({ tags, sensorIds, 
           dotClass = 'bg-sky-500';
           statusTextClass = 'bg-sky-500/20 text-sky-500';
           statusLabel = 'ZERO';
+        } else if (connection === 'stale') {
+          titleText = `${label} — Signal delayed; showing last valid value`;
+          badgeClass = 'bg-warning/10 text-warning border-warning/30';
+          dotClass = 'bg-warning animate-pulse';
+          statusTextClass = 'bg-warning/20 text-warning';
+          statusLabel = 'DELAY';
+        } else if (connection === 'fault') {
+          titleText = `${label} — Sensor value outside valid range`;
+          badgeClass = 'bg-orange-500/10 text-orange-500 border-orange-500/30';
+          dotClass = 'bg-orange-500 animate-pulse';
+          statusTextClass = 'bg-orange-500/20 text-orange-500';
+          statusLabel = 'FAULT';
         } else {
           titleText = `${label} — No data`;
           badgeClass = 'bg-destructive/10 text-destructive border-destructive/30';

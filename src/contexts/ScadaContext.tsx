@@ -52,7 +52,7 @@ export interface TagData {
   alarmEmails?: string[];
   alarmEnabled?: boolean;
   lastDataTime?: Date;
-  status?: 'connected' | 'disconnected' | 'unknown';
+  status?: 'connected' | 'disconnected' | 'unknown' | 'fault';
   mqttKey?: string;
   section?: 'oht' | 'intake' | 'wtp';
   subsection?: string;

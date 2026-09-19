@@ -18,7 +18,7 @@ import TemperatureDisplay from './instruments/TemperatureDisplay';
 import AlarmSettingsModal, { AlarmSettings } from './AlarmSettingsModal';
 import SensorTrendModal from './SensorTrendModal';
 import { Button } from '@/components/ui/button';
-import { TrendingUp, Wifi, WifiOff, CircleSlash } from 'lucide-react';
+import { TrendingUp, Wifi, WifiOff, CircleSlash, TriangleAlert } from 'lucide-react';
 import { AlarmBellButton } from './AlarmBellButton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useTagConnection } from '@/hooks/useTagConnection';
@@ -171,7 +171,17 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
   const isPump = sensor.instrumentType === 'pump';
 
   const getHealthBadge = () => {
-    // For pumps: binary ON / OFF driven by PT readings, never show 'ZERO'
+    if (connection === 'fault') {
+      return <span className="text-[8px] sm:text-[9px] font-bold px-1.5 py-0.5 rounded-md tracking-wider bg-orange-500/15 text-orange-500 border border-orange-500/30">FAULT</span>;
+    }
+    if (connection === 'stale') {
+      return <span className="text-[8px] sm:text-[9px] font-bold px-1.5 py-0.5 rounded-md tracking-wider bg-warning/15 text-warning border border-warning/30">DELAY</span>;
+    }
+    if (connection === 'no-data') {
+      return <span className="text-[8px] sm:text-[9px] font-bold px-1.5 py-0.5 rounded-md tracking-wider bg-destructive/15 text-destructive border border-destructive/30 animate-pulse">OFF</span>;
+    }
+
+    // For communicating pumps: binary ON / OFF driven by PT readings.
     if (isPump) {
       const isRunning = tag.value > 0.5;
       return (
@@ -194,10 +204,7 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
     } else if (connection === 'inactive') {
       label = 'ZERO';
       className = 'bg-sky-500/15 text-sky-500 border border-sky-500/30';
-    } else {
-      label = 'OFF';
-      className = 'bg-destructive/15 text-destructive border border-destructive/30 animate-pulse';
-    }
+    } else return null;
     return (
       <span className={`text-[8px] sm:text-[9px] font-bold px-1.5 py-0.5 rounded-md tracking-wider ${className}`}>
         {label}
@@ -206,6 +213,9 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
   };
 
   const ConnIcon: React.FC<{ className?: string }> = ({ className }) => {
+    if (connection === 'fault') return <TriangleAlert className={`${className} text-orange-500 animate-pulse`} />;
+    if (connection === 'stale') return <CircleSlash className={`${className} text-warning animate-pulse`} />;
+    if (connection === 'no-data') return <WifiOff className={`${className} text-destructive animate-pulse`} />;
     if (isPump) {
       const isRunning = tag.value > 0.5;
       return (
@@ -222,8 +232,8 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
     return (
       <div
         className={`premium-card rounded-xl p-3 sm:p-4 relative overflow-visible opacity-0 animate-fade-in flex flex-col h-full ${
-          !isPump && connection === 'no-data' ? 'border-destructive/50' : ''
-        } ${!isPump && connection === 'inactive' ? 'border-sky-500/30' : ''}`}
+          connection === 'no-data' ? 'border-destructive/50' : ''
+        } ${connection === 'stale' ? 'border-warning/50' : ''} ${connection === 'fault' ? 'border-orange-500/50' : ''} ${!isPump && connection === 'inactive' ? 'border-sky-500/30' : ''}`}
         style={{ animationDelay: `${index * 40}ms` }}
       >
         <div className="relative z-10 flex flex-col flex-1">
@@ -256,6 +266,8 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
           opacity-0 animate-fade-in
           flex flex-col h-full
           ${connection === 'no-data' ? 'border-destructive/50' : ''}
+          ${connection === 'stale' ? 'border-warning/50' : ''}
+          ${connection === 'fault' ? 'border-orange-500/50' : ''}
           ${connection === 'inactive' ? 'border-sky-500/30' : ''}
         `}
         style={{ animationDelay: `${index * 40}ms` }}

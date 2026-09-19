@@ -2,6 +2,7 @@ import React, { memo, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useScada } from '@/contexts/ScadaContext';
 import { ShieldCheck, Wifi, WifiOff, Activity, Zap, Gauge, BarChart3 } from 'lucide-react';
+import { isTagLive } from '@/hooks/useTagConnection';
 
 interface SystemHealthCardProps {
   section: 'intake' | 'wtp';
@@ -15,16 +16,15 @@ interface SystemHealthCardProps {
 const SystemHealthCard: React.FC<SystemHealthCardProps> = memo(({ section }) => {
   const { intakeTags, wtpTags } = useScada();
 
-  const tags = (section === 'intake' ? intakeTags : wtpTags).filter(t => t.isActive);
+  const tags = (section === 'intake' ? intakeTags : wtpTags).filter(t => !t.notInstalled);
 
   const stats = useMemo(() => {
     const analog = tags.filter(t => t.sensorType === 'analog');
     const digital = tags.filter(t => t.sensorType === 'digital');
     const totalizer = tags.filter(t => t.sensorType === 'totalizer');
 
-    // A sensor is "online" = status is 'connected' OR has received data (lastDataTime exists and > 0)
-    const isOnline = (t: typeof tags[0]) =>
-      t.status === 'connected' || (t.lastDataTime && t.lastDataTime.getTime() > 0);
+    // Online means a recent valid reading, not merely that a reading existed once.
+    const isOnline = (t: typeof tags[0]) => isTagLive(t);
 
     const onlineAnalog = analog.filter(isOnline);
     const onlineDigital = digital.filter(isOnline);
@@ -80,35 +80,35 @@ const SystemHealthCard: React.FC<SystemHealthCardProps> = memo(({ section }) => 
     const rows: { label: string; value: number; max: number; unit: string; color: string; online: boolean }[] = [];
 
     stats.ptTags.forEach(pt => {
-      const online = pt.status === 'connected' || (pt.lastDataTime && pt.lastDataTime.getTime() > 0);
+      const online = isTagLive(pt);
       rows.push({ label: pt.label.replace(' (PT)', ''), value: pt.value, max: 10, unit: 'Bar', color: 'hsl(var(--primary))', online: !!online });
     });
 
     stats.ltTags.forEach(lt => {
-      const online = lt.status === 'connected' || (lt.lastDataTime && lt.lastDataTime.getTime() > 0);
+      const online = isTagLive(lt);
       rows.push({ label: lt.label.replace(' (LT)', ''), value: lt.value, max: lt.id.includes('INT') ? 100 : 10, unit: 'm', color: 'hsl(var(--accent))', online: !!online });
     });
 
     if (stats.flowTag) {
-      const online = stats.flowTag.status === 'connected' || (stats.flowTag.lastDataTime && stats.flowTag.lastDataTime.getTime() > 0);
+      const online = isTagLive(stats.flowTag);
       rows.push({ label: 'Flow', value: stats.flowTag.value, max: 200, unit: 'm³/hr', color: 'hsl(var(--success))', online: !!online });
     }
 
     if (stats.kwTag) {
-      const online = stats.kwTag.status === 'connected' || (stats.kwTag.lastDataTime && stats.kwTag.lastDataTime.getTime() > 0);
+      const online = isTagLive(stats.kwTag);
       rows.push({ label: 'Energy', value: stats.kwTag.value, max: 100, unit: 'kW', color: 'hsl(38, 92%, 50%)', online: !!online });
     }
 
     if (stats.phTag) {
-      const online = stats.phTag.status === 'connected' || (stats.phTag.lastDataTime && stats.phTag.lastDataTime.getTime() > 0);
+      const online = isTagLive(stats.phTag);
       rows.push({ label: 'pH', value: stats.phTag.value, max: 14, unit: 'pH', color: 'hsl(142, 71%, 45%)', online: !!online });
     }
     if (stats.taTag) {
-      const online = stats.taTag.status === 'connected' || (stats.taTag.lastDataTime && stats.taTag.lastDataTime.getTime() > 0);
+      const online = isTagLive(stats.taTag);
       rows.push({ label: 'Turbidity', value: stats.taTag.value, max: 100, unit: 'NTU', color: 'hsl(38, 92%, 50%)', online: !!online });
     }
     if (stats.clTag) {
-      const online = stats.clTag.status === 'connected' || (stats.clTag.lastDataTime && stats.clTag.lastDataTime.getTime() > 0);
+      const online = isTagLive(stats.clTag);
       rows.push({ label: 'Chlorine', value: stats.clTag.value, max: 5, unit: 'mg/L', color: 'hsl(199, 89%, 48%)', online: !!online });
     }
 

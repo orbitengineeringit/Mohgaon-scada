@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { TagData } from '@/contexts/ScadaContext';
 import { PT_TO_PUMP_MAP } from '@/config/mohgaonSensors';
 import { logError, logInfo } from '@/lib/errorLogger';
+import { isValueWithinEngineeringRange, TELEMETRY_OFFLINE_MS } from '@/lib/telemetryQuality';
 
 interface CloudSyncProps {
   intakeTags: TagData[];
@@ -36,14 +37,15 @@ export const useCloudTelemetrySync = ({
         if (rawEntry === undefined) return tag;
 
         const val = typeof rawEntry === 'object' && rawEntry !== null ? rawEntry.value : rawEntry;
-        if (typeof val !== 'number' || isNaN(val)) return tag;
+        if (typeof val !== 'number' || !isValueWithinEngineeringRange(val, tag)) return tag;
 
         const entryTs = typeof rawEntry === 'object' && rawEntry !== null && rawEntry.timestamp 
           ? new Date(rawEntry.timestamp) 
           : now;
         const elapsedMs = now.getTime() - entryTs.getTime();
-        // Freshness window: 90 seconds (3× 30s RTU interval)
-        const isFresh = elapsedMs <= 90000;
+        // Cloud timestamps are receive times. A cellular pause is treated as
+        // delayed first and offline only after the shared hard timeout.
+        const isFresh = elapsedMs <= TELEMETRY_OFFLINE_MS;
         const tagStatus = isFresh ? ('connected' as const) : ('disconnected' as const);
 
         return {
@@ -126,7 +128,11 @@ export const useCloudTelemetrySync = ({
       }
 
       // Step 2: Trigger scada-ingest edge function to pull fresh live broker snapshot
-      const { data: ingestData, error: ingestErr } = await supabase.functions.invoke('scada-ingest');
+      // Live mode never writes historian rows. The server-side 5-minute cron is
+      // the single historian writer, independent of how many browsers are open.
+      const { data: ingestData, error: ingestErr } = await supabase.functions.invoke('scada-ingest', {
+        body: { mode: 'live' },
+      });
       if (!ingestErr && ingestData?.telemetry) {
         applyTelemetryData(ingestData.telemetry);
         logInfo('CloudTelemetry', `Synced ${Object.keys(ingestData.telemetry).length} live tags via Cloud Ingest`);

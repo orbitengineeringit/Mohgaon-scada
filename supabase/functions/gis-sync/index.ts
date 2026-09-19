@@ -45,6 +45,20 @@ const VALID_RANGE: Record<string, { min: number; max: number }> = {
   ])),
 };
 
+const isPercentageLevel = (id: string): boolean =>
+  id === "INT-LT" || id === "WTP-LT-CW" || id === "WTP-LT-BW" || /^OHT\d+-LT$/.test(id);
+
+function normalizeReading(id: string, value: number): number | undefined {
+  if (!Number.isFinite(value)) return undefined;
+  const range = VALID_RANGE[id];
+  if (!range) return value;
+  if (value >= range.min && value <= range.max) return value;
+  if (isPercentageLevel(id) && value >= range.min - 2 && value <= range.max + 2) {
+    return Math.min(range.max, Math.max(range.min, value));
+  }
+  return undefined;
+}
+
 function toIstString(d: Date | string | number): string {
   const date = new Date(d);
   const ist = new Date(date.getTime() + 5.5 * 60 * 60 * 1000);
@@ -196,12 +210,12 @@ Deno.serve(async (req) => {
     const v = (id: string) => {
       const reading = fresh(id);
       if (!reading) return undefined;
-      const range = VALID_RANGE[id];
-      if (range && (reading.value < range.min || reading.value > range.max)) {
+      const normalized = normalizeReading(id, reading.value);
+      if (normalized === undefined) {
         invalidReadings.set(id, reading);
         return undefined;
       }
-      return reading.value;
+      return normalized;
     };
     const stationTimestamp = (ids: string[]): string | undefined => {
       const timestamps = ids
@@ -235,6 +249,11 @@ Deno.serve(async (req) => {
       ].map(compact).filter((pump) => pump.actualPressure !== undefined);
     } else {
       skippedStations.push("intake");
+      // Garud's contract requires both properties even when the Intake RTU is
+      // offline. Send only its identity and an empty pump collection: no stale
+      // readings, zero substitutes, or fabricated recordDateTime.
+      requestPayload.intake = { intakWell_Device_id: cfg.intake_device_id };
+      requestPayload.intakePumps = [];
     }
 
     const wtpIsFresh = hasFreshData(wtpIds);
@@ -285,16 +304,16 @@ Deno.serve(async (req) => {
       ].map(compact).filter((pump) => pump.actualPressure !== undefined);
     } else {
       skippedStations.push("wtp");
+      // Keep the required WTP envelope without pretending that old telemetry
+      // is current. Garud receives no process values or fabricated timestamp.
+      wtpUnit.wtp = { wtP_Device_id: cfg.wtp_device_id };
+      wtpUnit.pumps = [];
     }
     // The Garud contract requires the collection even when every OHT is offline.
     // An empty array carries no fabricated OHT reading and lets Garud age the
     // missing devices to OFF based on their last received timestamps.
     wtpUnit.ohts = freshOhts;
-    if (Object.keys(wtpUnit).length > 0) requestPayload.wtpUnits = [wtpUnit];
-
-    if (includedStations.length === 0) {
-      throw new Error(`No fresh telemetry received in the last ${freshnessMinutes} minutes; GIS POST skipped`);
-    }
+    requestPayload.wtpUnits = [wtpUnit];
 
     // 4) POST to government endpoint (with 15s timeout to prevent cron crash)
     const resp = await fetch(endpoint, {

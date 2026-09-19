@@ -10,7 +10,7 @@ import {
   VALID_OHT_KEYS, VALID_INTAKE_KEYS, VALID_WTP_KEYS,
   MohgaonSensor, PT_TO_PUMP_MAP,
 } from '@/config/mohgaonSensors';
-import { isValueWithinEngineeringRange, TELEMETRY_OFFLINE_MS } from '@/lib/telemetryQuality';
+import { normalizeTelemetryValue, TELEMETRY_OFFLINE_MS } from '@/lib/telemetryQuality';
 
 interface TagUpdate {
   tagId: string;
@@ -394,7 +394,8 @@ export const useMqttTagSync = (
       if ((mqttKey === 'RAW_EFM_FLOW' || mqttKey === 'CLR_EFM_FLOW') && sensor.unit === 'm³/hr') {
         processedValue = value / 1000;
       }
-      const validatedValue = processedValue;
+      const normalizedValue = normalizeTelemetryValue(processedValue, sensor);
+      const validatedValue = normalizedValue ?? processedValue;
 
       const isNaNOrInfinite = validatedValue === null || validatedValue === undefined || isNaN(validatedValue) || !Number.isFinite(validatedValue);
       const isNegativeOverflow = !isNaNOrInfinite && (validatedValue < sensor.min - Math.max(1.0, sensor.max * 0.1));
@@ -404,7 +405,7 @@ export const useMqttTagSync = (
         validatedValue === 65535 || 
         validatedValue > 1e10
       );
-      const isOutsideEngineeringRange = !isNaNOrInfinite && !isValueWithinEngineeringRange(validatedValue, sensor);
+      const isOutsideEngineeringRange = !isNaNOrInfinite && normalizedValue === null;
       const isCorrupt = isNaNOrInfinite || isNegativeOverflow || isPositiveOverflow || isOutsideEngineeringRange;
 
       if (isCorrupt) {

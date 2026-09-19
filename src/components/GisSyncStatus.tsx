@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -7,7 +7,6 @@ import {
   Database, Clock, Wifi, Code2, FileText, History, Satellite,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { useScada } from '@/contexts/ScadaContext';
 import { toast } from 'sonner';
 
 interface SyncLog {
@@ -51,16 +50,73 @@ const stationDeliveryFromPayload = (payload: unknown, key: string, deviceId: str
   const body = payload as Record<string, unknown>;
   if (key === 'intake') {
     const intake = body.intake as Record<string, unknown> | undefined;
-    return { included: !!intake, sourceAt: typeof intake?.recordDateTime === 'string' ? intake.recordDateTime : undefined };
+    const sourceAt = typeof intake?.recordDateTime === 'string' ? intake.recordDateTime : undefined;
+    return { included: !!sourceAt, sourceAt };
   }
   const unit = Array.isArray(body.wtpUnits) ? body.wtpUnits[0] as Record<string, unknown> | undefined : undefined;
   if (key === 'wtp') {
     const wtp = unit?.wtp as Record<string, unknown> | undefined;
-    return { included: !!wtp, sourceAt: typeof wtp?.recordDateTime === 'string' ? wtp.recordDateTime : undefined };
+    const sourceAt = typeof wtp?.recordDateTime === 'string' ? wtp.recordDateTime : undefined;
+    return { included: !!sourceAt, sourceAt };
   }
   const ohts = Array.isArray(unit?.ohts) ? unit.ohts as Record<string, unknown>[] : [];
   const oht = ohts.find((item) => item.ohT_Device_id === deviceId);
   return { included: !!oht, sourceAt: typeof oht?.recordDateTime === 'string' ? oht.recordDateTime : undefined };
+};
+
+const asRecord = (value: unknown): Record<string, unknown> | undefined =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+
+const rowsFromPayload = (payload: unknown, key: string, deviceId: string): ParamRow[] => {
+  const body = asRecord(payload);
+  if (!body) return [];
+  const unit = Array.isArray(body.wtpUnits) ? asRecord(body.wtpUnits[0]) : undefined;
+  let station: Record<string, unknown> | undefined;
+  if (key === 'intake') station = asRecord(body.intake);
+  else if (key === 'wtp') station = asRecord(unit?.wtp);
+  else {
+    const ohts = Array.isArray(unit?.ohts) ? unit.ohts.map(asRecord).filter(Boolean) as Record<string, unknown>[] : [];
+    station = ohts.find(item => item.ohT_Device_id === deviceId);
+  }
+  if (!station) return [];
+
+  const value = (field: string, digits = 2): string | undefined => {
+    const raw = station?.[field];
+    const numeric = typeof raw === 'number' ? raw : Number(raw);
+    return Number.isFinite(numeric) ? numeric.toFixed(digits) : undefined;
+  };
+  const row = (param: string, field: string, unitLabel: string, sensorId: string, digits = 2): ParamRow | null => {
+    const formatted = value(field, digits);
+    return formatted === undefined ? null : { param, value: formatted, unit: unitLabel, sensorId };
+  };
+
+  const rows = key === 'intake'
+    ? [
+        row('Level', 'intakeWellLevel_mtr', '%', 'INT-LT'),
+        row('Outlet Flow', 'outletFlow_mld', 'MLD', 'INT-Flow', 4),
+        row('Header Pressure', 'headerActualPressure', 'Bar', 'INT-CombinedPT', 3),
+      ]
+    : key === 'wtp'
+      ? [
+          row('Inlet Flow', 'inletFlow_mld', 'MLD', 'WTP-Flow-IN', 4),
+          row('Outlet Flow', 'outletFlow_mld', 'MLD', 'WTP-Flow-OUT', 4),
+          row('Raw pH', 'rawPh', 'pH', 'WTP-PH-IN'),
+          row('Raw Turbidity', 'rawTurbidity', 'NTU', 'WTP-TA-IN'),
+          row('Treated pH', 'treatedPh', 'pH', 'WTP-PH'),
+          row('Treated Turbidity', 'treatedTurbidity', 'NTU', 'WTP-TA'),
+          row('Chlorine', 'chlorine', 'ppm', 'WTP-CL', 3),
+          row('CWR Level', 'cwrLevel', '%', 'WTP-LT-CW'),
+          row('Backwash Level', 'backwashLevel', '%', 'WTP-LT-BW'),
+          row('Header Pressure', 'headerActualPressure', 'Bar', 'WTP-HeaderPT', 3),
+        ]
+      : [
+          row('Level', 'waterLevel_mld', '%', `${key.toUpperCase()}-LT`),
+          row('Inlet Flow', 'inletFlow_mld', 'MLD', `${key.toUpperCase()}-Flow-IN`, 4),
+          row('Pressure', 'inletPressure', 'Bar', `${key.toUpperCase()}-PT`, 3),
+        ];
+  return rows.filter((item): item is ParamRow => item !== null);
 };
 
 const GisSyncStatus = () => {
@@ -72,7 +128,6 @@ const GisSyncStatus = () => {
   const [lastResponse, setLastResponse] = useState<SyncProof | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [showJson, setShowJson] = useState(false);
-  const { intakeTags, ohtTags, wtpTags } = useScada();
 
   const readLocal = () => {
     try {
@@ -122,36 +177,6 @@ const GisSyncStatus = () => {
     } finally { setBusy(false); }
   };
 
-  const live = useMemo(() => {
-    const get = (arr: unknown[], id: string) => arr.find(t => t.id === id)?.value;
-    const f = (n: number | undefined, d = 2) => (n == null || isNaN(Number(n)) ? '—' : Number(n).toFixed(d));
-    const mld = (m3hr: number | undefined) => (m3hr == null ? '—' : (Number(m3hr) * 0.024).toFixed(3));
-
-    const intake: ParamRow[] = [
-      { param: 'LT', value: f(get(intakeTags, 'INT-LT'), 2), unit: 'mtr', sensorId: 'INT-LT' },
-      { param: 'Flow', value: f(get(intakeTags, 'INT-Flow'), 3), unit: `m³/hr (${mld(get(intakeTags, 'INT-Flow'))} MLD)`, sensorId: 'INT-Flow' },
-      { param: 'Pressure 1', value: f(get(intakeTags, 'INT-PT1'), 3), unit: 'Bar', sensorId: 'INT-PT1' },
-    ];
-    const wtp: ParamRow[] = [
-      { param: 'Inlet Flow', value: f(get(wtpTags, 'WTP-Flow-IN'), 3), unit: `m³/hr (${mld(get(wtpTags, 'WTP-Flow-IN'))} MLD)`, sensorId: 'WTP-Flow-IN' },
-      { param: 'Outlet Flow', value: f(get(wtpTags, 'WTP-Flow-OUT'), 3), unit: `m³/hr (${mld(get(wtpTags, 'WTP-Flow-OUT'))} MLD)`, sensorId: 'WTP-Flow-OUT' },
-      { param: 'Raw pH', value: f(get(wtpTags, 'WTP-PH-IN'), 2), unit: 'pH', sensorId: 'WTP-PH-IN' },
-      { param: 'Raw Turbidity', value: f(get(wtpTags, 'WTP-TA-IN'), 2), unit: 'NTU', sensorId: 'WTP-TA-IN' },
-      { param: 'Treated pH', value: f(get(wtpTags, 'WTP-PH'), 2), unit: 'pH', sensorId: 'WTP-PH' },
-      { param: 'Treated Turbidity', value: f(get(wtpTags, 'WTP-TA'), 2), unit: 'NTU', sensorId: 'WTP-TA' },
-      { param: 'Chlorine', value: f(get(wtpTags, 'WTP-CL'), 2), unit: 'ppm', sensorId: 'WTP-CL' },
-      { param: 'CWR Level', value: f(get(wtpTags, 'WTP-LT-CW'), 2), unit: 'm', sensorId: 'WTP-LT-CW' },
-      { param: 'Backwash Level', value: f(get(wtpTags, 'WTP-LT-BW'), 2), unit: 'm', sensorId: 'WTP-LT-BW' },
-      { param: 'Header Pressure', value: f(get(wtpTags, 'WTP-CombinedPT1'), 2), unit: 'Bar', sensorId: 'WTP-CombinedPT1' },
-    ];
-    const ohtFor = (n: 1 | 2 | 3 | 4): ParamRow[] => ([
-      { param: 'LT', value: f(get(ohtTags, `OHT${n}-LT`), 2), unit: 'm', sensorId: `OHT${n}-LT` },
-      { param: 'Flow In', value: f(get(ohtTags, `OHT${n}-Flow-IN`), 3), unit: `m³/hr (${mld(get(ohtTags, `OHT${n}-Flow-IN`))} MLD)`, sensorId: `OHT${n}-Flow-IN` },
-      { param: 'Pressure', value: f(get(ohtTags, `OHT${n}-PT`), 3), unit: 'Bar', sensorId: `OHT${n}-PT` },
-    ]);
-    return { intake, wtp, oht1: ohtFor(1), oht2: ohtFor(2), oht3: ohtFor(3), oht4: ohtFor(4) } as Record<string, ParamRow[]>;
-  }, [intakeTags, ohtTags, wtpTags]);
-
   const copyProof = (log: SyncLog) => {
     const text = [
       '════════════════════════════════════',
@@ -174,16 +199,20 @@ const GisSyncStatus = () => {
   const lastLog = logs[0];
   const successCount = logs.filter(l => l.success).length;
   const batchTotal = logs.length;
-  const gatewayOk = logsLoaded ? !!lastLog?.success : true;
-  const gatewayUnknown = !logsLoaded;
+  const gatewayOk = lastLog ? lastLog.success : !!lastResponse && lastResponse.status != null && lastResponse.status >= 200 && lastResponse.status < 300;
+  const gatewayUnknown = logsLoaded ? !lastLog && !lastResponse : !lastResponse;
   const lastDuration = lastLog?.duration_ms ?? lastResponse?.duration_ms;
   const lastStatus = lastLog?.response_status ?? lastResponse?.status;
   const latestLogTime = lastLog?.triggered_at || lastSyncAt;
   const lastTimeStr = latestLogTime
     ? new Date(latestLogTime).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : '—';
-  const includedStations = lastResponse?.included_stations;
-  const skippedStations = lastResponse?.skipped_stations;
+  const activePayload = lastLog?.request_payload ?? lastPayload;
+  // A DB audit log is authoritative. Browser-local proof is used only until
+  // the corresponding audit row becomes visible, avoiding mixed attempts.
+  const activeProof = lastLog ? null : lastResponse;
+  const includedStations = activeProof?.included_stations;
+  const skippedStations = activeProof?.skipped_stations;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -230,7 +259,7 @@ const GisSyncStatus = () => {
           {/* Top stat row */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
             <StatCard
-              label="GATEWAY CONNECTION"
+              label="LAST TRANSMISSION"
               icon={<Wifi className="h-4 w-4" />}
               value={
                 gatewayUnknown ? (
@@ -241,7 +270,7 @@ const GisSyncStatus = () => {
                 ) : (
                   <span className={`flex items-center gap-1.5 font-bold ${gatewayOk ? 'text-success' : 'text-destructive'}`}>
                     {gatewayOk ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-                    {gatewayOk ? 'CONNECTED' : 'DISCONNECTED'}
+                    {gatewayOk ? 'SUCCESS' : 'FAILED'}
                   </span>
                 )
               }
@@ -252,19 +281,19 @@ const GisSyncStatus = () => {
               }
             />
             <StatCard
-              label="UPLOAD BATCH STATUS"
+              label="RECENT TRANSMISSIONS"
               icon={<Database className="h-4 w-4" />}
               value={
                 <span className="text-base font-bold">
-                  {successCount} / {batchTotal || 0} <span className="text-xs font-medium text-muted-foreground">Succeeded</span>
+                  {successCount} / {batchTotal || 0} <span className="text-xs font-medium text-muted-foreground">Successful</span>
                 </span>
               }
             />
             <StatCard
-              label="LAST PUSHED TIME"
+              label="LAST ATTEMPT TIME"
               icon={<Clock className="h-4 w-4 text-primary" />}
               value={<span className="text-base font-bold font-mono">{lastTimeStr}</span>}
-              accent={<span className="text-[10px] text-muted-foreground">1 hr cycle · manual unknown time</span>}
+              accent={<span className="text-[10px] text-muted-foreground">automatic every 1 hour</span>}
             />
             <div className="rounded-xl border bg-card p-3 flex flex-col gap-2">
               <div className="text-[10px] font-bold tracking-wider text-muted-foreground">MANUAL SYNC OVERRIDE</div>
@@ -284,12 +313,12 @@ const GisSyncStatus = () => {
           <div>
             <div className="flex flex-col sm:flex-row sm:items-baseline gap-0.5 sm:gap-2 mb-2">
               <h3 className="text-xs font-bold tracking-wider text-foreground">SENSOR SYNC BOARD</h3>
-              <span className="text-[10px] sm:text-[11px] text-muted-foreground">(swipe / scroll horizontally to view all 5 stations)</span>
+              <span className="text-[10px] sm:text-[11px] text-muted-foreground">(swipe / scroll horizontally to view all 6 stations)</span>
             </div>
             <div className="overflow-x-auto pb-2 -mx-1 px-1">
               <div className="flex gap-3 min-w-min">
                 {DEVICES.map(d => {
-                  const delivery = stationDeliveryFromPayload(lastLog?.request_payload ?? lastPayload, d.key, d.id);
+                  const delivery = stationDeliveryFromPayload(activePayload, d.key, d.id);
                   const included = includedStations ? includedStations.includes(d.key) : delivery.included;
                   const skipped = skippedStations ? skippedStations.includes(d.key) : included === false;
                   return (
@@ -302,12 +331,12 @@ const GisSyncStatus = () => {
                       status={lastStatus}
                       duration={lastDuration}
                       timeStr={lastTimeStr}
-                      rows={live[d.key] || []}
-                      payload={lastLog?.request_payload ?? lastPayload}
+                      rows={rowsFromPayload(activePayload, d.key, d.id)}
+                      payload={activePayload}
                       responseText={lastLog?.response_body || lastResponse?.response}
                       included={included}
                       skipped={skipped}
-                      sourceAt={lastResponse?.source_latest_at?.[d.key] || delivery.sourceAt}
+                      sourceAt={activeProof?.source_latest_at?.[d.key] || delivery.sourceAt}
                     />
                   );
                 })}
@@ -324,13 +353,13 @@ const GisSyncStatus = () => {
                 </div>
                 <Button
                   variant="ghost" size="sm"
-                  onClick={() => { navigator.clipboard.writeText(JSON.stringify(lastPayload ?? {}, null, 2)); toast.success('JSON copied'); }}
+                  onClick={() => { navigator.clipboard.writeText(JSON.stringify(activePayload ?? {}, null, 2)); toast.success('JSON copied'); }}
                 >
                   <Copy className="h-3 w-3 mr-1" /> Copy
                 </Button>
               </div>
               <pre className="p-3 text-[10px] overflow-auto max-h-[40vh] whitespace-pre-wrap break-all font-mono">
-                {lastPayload ? JSON.stringify(lastPayload, null, 2) : 'No payload yet — trigger a sync.'}
+                {activePayload ? JSON.stringify(activePayload, null, 2) : 'No payload yet — trigger a sync.'}
               </pre>
             </div>
           )}
@@ -424,28 +453,34 @@ const StationCard = ({ label, deviceId, success, unknown: unknownProp, status, d
           </div>
         </div>
         <Badge className={`text-[9px] font-bold ${unknownProp ? 'bg-muted text-muted-foreground border-border' : skipped ? 'bg-muted text-muted-foreground border-border' : success && included !== false ? 'bg-success/15 text-success border-success/30' : 'bg-destructive/15 text-destructive border-destructive/30'}`}>
-          {unknownProp ? '…' : skipped ? 'OFFLINE' : success && included !== false ? 'SENT' : 'FAILED'}
+          {unknownProp ? '…' : skipped ? 'NOT SENT' : success && included !== false ? 'SENT' : 'FAILED'}
         </Badge>
       </div>
 
       <div className="px-3 py-2 border-b text-[10px] font-mono flex items-center justify-between gap-2 bg-background">
-        <span><span className="text-muted-foreground">Code:</span> <b className={success ? 'text-success' : 'text-destructive'}>{status ?? '—'}</b></span>
-        <span><span className="text-muted-foreground">Duration:</span> <b>{duration ?? '?'}ms</b></span>
-        <span><span className="text-muted-foreground">Data:</span> <b>{sourceAt ? new Date(sourceAt).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) : timeStr}</b></span>
+        <span><span className="text-muted-foreground">Code:</span> <b className={skipped ? 'text-muted-foreground' : success ? 'text-success' : 'text-destructive'}>{skipped ? '—' : status ?? '—'}</b></span>
+        <span><span className="text-muted-foreground">Duration:</span> <b>{skipped ? '—' : duration != null ? `${duration}ms` : '—'}</b></span>
+        <span><span className="text-muted-foreground">Data:</span> <b>{sourceAt ? new Date(sourceAt).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) : skipped ? '—' : timeStr}</b></span>
       </div>
 
       <div className="px-3 py-2">
-        <div className="text-[10px] font-bold tracking-wider text-muted-foreground mb-1.5">ACTIVE PARAMETERS PUSHED</div>
-        <div className="text-[10px]">
-          <div className="grid grid-cols-[1fr_auto_auto] gap-x-2 gap-y-1 font-mono items-center">
-            <div className="text-muted-foreground font-semibold">Param</div>
-            <div className="text-muted-foreground font-semibold text-right">Value</div>
-            <div className="text-muted-foreground font-semibold text-right">Sensor ID</div>
-            {rows.map(r => (
-              <FragmentRow key={r.sensorId} row={r} />
-            ))}
+        <div className="text-[10px] font-bold tracking-wider text-muted-foreground mb-1.5">PARAMETERS SENT IN THIS ATTEMPT</div>
+        {rows.length > 0 ? (
+          <div className="text-[10px]">
+            <div className="grid grid-cols-[1fr_auto_auto] gap-x-2 gap-y-1 font-mono items-center">
+              <div className="text-muted-foreground font-semibold">Param</div>
+              <div className="text-muted-foreground font-semibold text-right">Value</div>
+              <div className="text-muted-foreground font-semibold text-right">Sensor ID</div>
+              {rows.map(r => (
+                <FragmentRow key={r.sensorId} row={r} />
+              ))}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="rounded-lg bg-muted/50 px-2.5 py-3 text-[10px] text-muted-foreground text-center">
+            {skipped ? 'No fresh telemetry was sent for this station.' : 'No station payload is available for this attempt.'}
+          </div>
+        )}
       </div>
 
       <div className="mt-auto px-3 py-2 border-t flex gap-1.5 bg-muted/20">

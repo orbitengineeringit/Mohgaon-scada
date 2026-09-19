@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { TagData } from '@/contexts/ScadaContext';
 import { PT_TO_PUMP_MAP } from '@/config/mohgaonSensors';
 import { logError, logInfo } from '@/lib/errorLogger';
-import { isValueWithinEngineeringRange, TELEMETRY_OFFLINE_MS } from '@/lib/telemetryQuality';
+import { normalizeTelemetryValue, TELEMETRY_OFFLINE_MS } from '@/lib/telemetryQuality';
 
 interface CloudSyncProps {
   intakeTags: TagData[];
@@ -37,7 +37,9 @@ export const useCloudTelemetrySync = ({
         if (rawEntry === undefined) return tag;
 
         const val = typeof rawEntry === 'object' && rawEntry !== null ? rawEntry.value : rawEntry;
-        if (typeof val !== 'number' || !isValueWithinEngineeringRange(val, tag)) return tag;
+        if (typeof val !== 'number') return tag;
+        const normalizedValue = normalizeTelemetryValue(val, tag);
+        if (normalizedValue === null) return tag;
 
         const entryTs = typeof rawEntry === 'object' && rawEntry !== null && rawEntry.timestamp 
           ? new Date(rawEntry.timestamp) 
@@ -50,7 +52,7 @@ export const useCloudTelemetrySync = ({
 
         return {
           ...tag,
-          value: isFresh ? val : (tag.value ?? val),
+          value: isFresh ? normalizedValue : (tag.value ?? normalizedValue),
           status: tagStatus,
           source: 'mqtt' as const,
           isActive: isFresh,

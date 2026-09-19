@@ -38,6 +38,19 @@ type ParsedMessage = {
   timestamp: Date;
 };
 
+function normalizeSensorValue(sensor: Sensor, value: number): number | null {
+  if (!Number.isFinite(value)) return null;
+  if (value >= sensor.min && value <= sensor.max) return value;
+
+  const isPercentagePosition = sensor.unit === "%" &&
+    (sensor.instrumentType === "lt" || sensor.instrumentType === "fcv");
+  if (isPercentagePosition && value >= sensor.min - 2 && value <= sensor.max + 2) {
+    return Math.min(sensor.max, Math.max(sensor.min, value));
+  }
+
+  return null;
+}
+
 const DEFAULT_TOPICS = {
   INTAKE: "mohgaon/intake",
   WTP: "mohgaon/wtp",
@@ -391,13 +404,14 @@ Deno.serve(async (req: Request) => {
         if ((mqttKey === 'RAW_EFM_FLOW' || mqttKey === 'CLR_EFM_FLOW') && sensor.unit === 'm³/hr') {
           value = value / 1000;
         }
-        // Engineering ranges are hard quality limits. For example BW_LT is
-        // physically 0..100%; 100.886 is a fault, not a value to clamp/save.
-        if (value < sensor.min || value > sensor.max) {
+        // Percentage level/valve transmitters may report a small calibrated
+        // saturation beyond 0..100. Clamp only the narrow +/-2% end-stop band;
+        // every larger excursion remains an invalid sensor reading.
+        const cleanValue = normalizeSensorValue(sensor, value);
+        if (cleanValue === null) {
           console.warn(`Rejected out-of-range reading ${sensor.id}=${value} (valid ${sensor.min}..${sensor.max})`);
           continue;
         }
-        const cleanValue = value;
         // Use aligned timestamp instead of raw MQTT message time
         byTag.set(`${sensor.section}-${sensor.id}`, {
           sensor,

@@ -14,6 +14,18 @@ export type Database = {
   }
   public: {
     Tables: {
+      telemetry_latest: {
+        Row: {tag_id:string;section:string;value:number|null;quality:string;received_at:string;mqtt_topic:string}
+        Insert: {tag_id:string;section:string;value?:number|null;quality:string;received_at:string;mqtt_topic:string}
+        Update: {tag_id?:string;section?:string;value?:number|null;quality?:string;received_at?:string;mqtt_topic?:string}
+        Relationships: []
+      }
+      telemetry_ingest_runs: {
+        Row: {id:string;started_at:string;connected_at:string|null;last_message_at:string|null;finished_at:string|null;status:string;message_count:number;saved_count:number;error_message:string|null}
+        Insert: {id:string;started_at?:string;status?:string}
+        Update: {status?:string;finished_at?:string;error_message?:string|null}
+        Relationships: []
+      }
       alarms: {
         Row: {
           acknowledged: boolean | null

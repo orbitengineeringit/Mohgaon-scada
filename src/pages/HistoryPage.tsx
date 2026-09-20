@@ -100,6 +100,7 @@ interface HistorianLog {
   section: string;
   value: number;
   timestamp: string;
+  received_at?: string | null;
   tag_config: {
     label: string;
     unit: string;
@@ -358,7 +359,7 @@ const HistoryPage: React.FC = () => {
 
       const offset = (page - 1) * currentSize;
       let dataQuery = supabase.from('historian_logs')
-        .select(`id, tag_id, section, value, timestamp, tag_config:tag_config_id (label, unit)`)
+        .select(`id, tag_id, section, value, timestamp, received_at, tag_config:tag_config_id (label, unit)`)
         .gte('timestamp', startTime).lte('timestamp', endTime)
         .not('tag_id', 'in', UNINSTALLED_TAGS_FILTER)
         .or('source.like.%5min%,source.is.null')
@@ -414,7 +415,7 @@ const HistoryPage: React.FC = () => {
   }, [globalFilters.startDate, globalFilters.endDate, getSectionFilters, getOhtTagPrefixes, globalFilters.assets, pageSize, toast]);
 
   useEffect(() => {
-    if (autoRefresh && globalFilters.startDate && globalFilters.endDate && totalCount > 0) {
+    if (autoRefresh && globalFilters.startDate && globalFilters.endDate) {
       autoRefreshIntervalRef.current = setInterval(() => fetchLogs(currentPage), 30000);
     }
     return () => { if (autoRefreshIntervalRef.current) clearInterval(autoRefreshIntervalRef.current); };
@@ -477,8 +478,10 @@ const HistoryPage: React.FC = () => {
           const from = pageIdx * PAGE;
           const to = from + PAGE - 1;
           let q = supabase.from('historian_logs')
-            .select(`id, tag_id, section, value, timestamp, tag_config:tag_config_id (label, unit)`)
+            .select(`id, tag_id, section, value, timestamp, received_at, tag_config:tag_config_id (label, unit)`)
             .order('timestamp', { ascending: false })
+            .order('tag_id', { ascending: true })
+            .order('id', { ascending: true })
             .range(from, to);
           q = applyFilters(q);
           const { data, error } = await q;
@@ -556,10 +559,11 @@ const HistoryPage: React.FC = () => {
         { key: 'label', width: 32 },
         { key: 'value', width: 14 },
         { key: 'unit', width: 10 },
+        { key: 'received', width: 23 },
       ];
 
       // Row 1: Title banner
-      ws.mergeCells('A1:F1');
+      ws.mergeCells('A1:G1');
       const titleCell = ws.getCell('A1');
       titleCell.value = `💧  ${plantName.toUpperCase()}  —  HISTORICAL RECORDS`;
       titleCell.font = { name: 'Segoe UI', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
@@ -568,7 +572,7 @@ const HistoryPage: React.FC = () => {
       ws.getRow(1).height = 38;
 
       // Row 2: Period / records / generated info
-      ws.mergeCells('A2:F2');
+      ws.mergeCells('A2:G2');
       const infoCell = ws.getCell('A2');
       const startStr = format(globalFilters.startDate, 'd MMM yyyy');
       const endStr = format(globalFilters.endDate, 'd MMM yyyy');
@@ -589,7 +593,7 @@ const HistoryPage: React.FC = () => {
           : '';
       }
       const recordsStr = exportInterval === 'all'
-        ? `📊 Records: ${totalCountVal.toLocaleString()}`
+        ? `📊 Records: ${exportCount.toLocaleString()}`
         : `📊 ${exportCount.toLocaleString()} of ${totalCountVal.toLocaleString()} records  •  Interval: ${INTERVAL_LABEL[exportInterval]}`;
       infoCell.value = `📅 Selected: ${startStr}  →  ${endStr}${actualStr}     ${recordsStr}     🕒 Generated: ${genStr}`;
       infoCell.font = { name: 'Segoe UI', size: 11, bold: true, color: { argb: 'FF1F2937' } };
@@ -602,7 +606,7 @@ const HistoryPage: React.FC = () => {
 
       // Row 4: Header
       const headerRow = ws.getRow(4);
-      const headers = ['⏱  Timestamp', '🏭  Section', '🔧  Sensor Type', '🏷  Label / Tag', '📈  Value', '⚠  Unit'];
+      const headers = ['⏱  5-min interval', '🏭  Section', '🔧  Sensor Type', '🏷  Label / Tag', '📈  Value', '⚠  Unit', 'Received at (IST)'];
       const headerColors = ['FF2563EB', 'FFDC2626', 'FF7C3AED', 'FF059669', 'FFEA580C', 'FFCA8A04'];
       headers.forEach((h, i) => {
         const c = headerRow.getCell(i + 1);
@@ -616,7 +620,7 @@ const HistoryPage: React.FC = () => {
         };
       });
       headerRow.height = 26;
-      ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4, column: 6 } };
+      ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4, column: 7 } };
 
       // Data rows
       const sectionFill: Record<string, string> = {
@@ -646,7 +650,7 @@ const HistoryPage: React.FC = () => {
         else if (normalized.includes('chlorine')) sensorType = 'Chlorine';
         else if (normalized.includes('kw') || normalized.includes('energy')) sensorType = 'Energy';
 
-        const valueOut = isPump ? (Number(log.value) >= 1 ? 'ON' : 'OFF') : Number(Number(log.value).toFixed(2));
+        const valueOut = isPump ? (Number(log.value) >= 1 ? 'ON' : 'OFF') : Number(log.value);
 
         const row = ws.addRow({
           ts: format(new Date(log.timestamp), 'yyyy-MM-dd HH:mm:ss'),
@@ -655,6 +659,7 @@ const HistoryPage: React.FC = () => {
           label,
           value: valueOut,
           unit: log.tag_config?.unit || '',
+          received: log.received_at ? format(new Date(log.received_at), 'yyyy-MM-dd HH:mm:ss') : '',
         });
 
         const sec = log.section.toLowerCase();
@@ -676,7 +681,7 @@ const HistoryPage: React.FC = () => {
         // Value
         const valCell = row.getCell(5);
         if (typeof valueOut === 'number') {
-          valCell.numFmt = '#,##0.00';
+          valCell.numFmt = '#,##0.00####';
           valCell.font = { name: 'Consolas', size: 11, bold: true, color: { argb: 'FF111827' } };
         } else {
           valCell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: valueOut === 'ON' ? 'FF059669' : 'FFDC2626' } };
@@ -934,6 +939,7 @@ const HistoryPage: React.FC = () => {
                                     )} />
                                     {timeStr}
                                   </span>
+                                  {log.received_at && <span className="text-[9px] text-muted-foreground">Received {format(new Date(log.received_at), 'HH:mm:ss')}</span>}
                                 </div>
                               </TableCell>
                               <TableCell className="py-3.5 sm:py-4 whitespace-nowrap">

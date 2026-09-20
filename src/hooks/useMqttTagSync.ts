@@ -388,12 +388,8 @@ export const useMqttTagSync = (
       const existingTag = tags.find(t => t.id === sensorId);
 
       // --- MLTCV Layer 1: Raw Signal Validation (NaN/Overflow Checks) ---
-      // Unit conversion: RTU sends RAW_EFM_FLOW and CLR_EFM_FLOW in L/hr
-      // SCADA displays in m³/hr → divide by 1000
+      // Commissioned PLC flow values are already m³/hr (confirmed on site).
       let processedValue = value;
-      if ((mqttKey === 'RAW_EFM_FLOW' || mqttKey === 'CLR_EFM_FLOW') && sensor.unit === 'm³/hr') {
-        processedValue = value / 1000;
-      }
       const normalizedValue = normalizeTelemetryValue(processedValue, sensor);
       const validatedValue = normalizedValue ?? processedValue;
 

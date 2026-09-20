@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Calendar, TrendingUp, TrendingDown, Minus, BarChart3, Droplets, Gauge, Zap, Activity, Database, Clock } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useScada } from '@/contexts/ScadaContext';
+import { getTagConnection } from '@/hooks/useTagConnection';
 
 interface HistoricalAnalyticsCardProps {
   section: 'intake' | 'wtp' | 'oht';
@@ -95,7 +96,7 @@ MiniBarChart.displayName = 'MiniBarChart';
 
 /** Live Instrument Status Row */
 const LiveInstrumentRow: React.FC<{ label: string; value: number; unit: string; status: string; color: string }> = memo(({ label, value, unit, status, color }) => {
-  const isLive = status === 'connected';
+  const isLive = status === 'connected' || status === 'inactive';
   const isZero = value === 0 && isLive;
   return (
     <div className="flex items-center gap-2 py-1.5 px-2 rounded-lg hover:bg-muted/20 transition-colors">
@@ -108,7 +109,7 @@ const LiveInstrumentRow: React.FC<{ label: string; value: number; unit: string; 
       <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-bold ${
         isLive ? 'bg-success/10 text-success' : 'bg-muted/50 text-muted-foreground'
       }`}>
-        {isLive ? (isZero ? 'ZERO' : 'LIVE') : 'OFF'}
+        {isLive ? (isZero ? 'ZERO' : 'LIVE') : status === 'stale' ? 'DELAY' : status === 'fault' ? 'FAULT' : 'OFF'}
       </span>
     </div>
   );
@@ -124,24 +125,25 @@ const HistoricalAnalyticsCard: React.FC<HistoricalAnalyticsCardProps> = memo(({ 
 
   // Build live instrument summary
   const liveInstruments = useMemo(() => {
-    return liveTags.map(tag => ({
+    return liveTags.filter(tag => !tag.notInstalled && tag.instrumentType !== 'pump').map(tag => ({
       id: tag.id,
       label: tag.label,
       value: tag.value,
       unit: tag.unit,
-      status: tag.status || 'disconnected',
+      status: getTagConnection(tag),
       instrumentType: tag.instrumentType,
     }));
   }, [liveTags]);
 
   const liveStats = useMemo(() => {
     const totalInstruments = liveInstruments.length;
-    const onlineCount = liveInstruments.filter(i => i.status === 'connected').length;
+    const onlineCount = liveInstruments.filter(i => i.status === 'connected' || i.status === 'inactive').length;
     const activeCount = liveInstruments.filter(i => i.status === 'connected' && i.value > 0).length;
     
-    const levelTags = liveInstruments.filter(i => i.instrumentType === 'lt');
-    const flowTags = liveInstruments.filter(i => i.instrumentType === 'flow');
-    const ptTags = liveInstruments.filter(i => i.instrumentType === 'pt');
+    const fresh = liveInstruments.filter(i => i.status === 'connected' || i.status === 'inactive');
+    const levelTags = fresh.filter(i => i.instrumentType === 'lt');
+    const flowTags = fresh.filter(i => i.instrumentType === 'flow');
+    const ptTags = fresh.filter(i => i.instrumentType === 'pt');
     
     const avgLevel = levelTags.length > 0 ? levelTags.reduce((s, t) => s + t.value, 0) / levelTags.length : 0;
     const totalFlow = flowTags.reduce((s, t) => s + t.value, 0);

@@ -13,11 +13,11 @@ interface SensorStatusStripProps {
  * Compact horizontal strip showing ON/OFF/ZERO status for each listed sensor.
  */
 const SensorStatusStrip: React.FC<SensorStatusStripProps> = ({ tags, sensorIds, labels }) => {
-  const items = useMemo(() => sensorIds.map(id => {
+  const items = sensorIds.map(id => {
     const tag = tags.find(t => t.id === id);
     const connection = getTagConnection(tag);
     return { id, tag, connection, label: labels?.[id] ?? tag?.label ?? id };
-  }), [tags, sensorIds, labels]);
+  });
 
   const activeCount = items.filter(i => i.connection === 'connected' || i.connection === 'inactive').length;
 

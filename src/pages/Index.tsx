@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useScada } from '@/contexts/ScadaContext';
 import StatusBar from '@/components/StatusBar';
+import { isTagLive } from '@/hooks/useTagConnection';
 import MiniSparkline from '@/components/instruments/MiniSparkline';
 import { ArrowRight, Building2, Droplet, Cpu, UserCheck } from 'lucide-react';
 
@@ -24,7 +25,7 @@ const Index = () => {
   const installedTags = (tags: typeof intakeTags) => tags.filter(t => !t.notInstalled && t.instrumentType !== 'pump');
 
   const getDataActiveCount = (tags: typeof intakeTags) => {
-    return installedTags(tags).filter(t => t.status === 'connected').length;
+    return installedTags(tags).filter(isTagLive).length;
   };
 
   const totalSensors = installedTags(intakeTags).length + installedTags(ohtTags).length + installedTags(wtpTags).length;

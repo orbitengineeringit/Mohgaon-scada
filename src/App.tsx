@@ -51,18 +51,13 @@ import { useMqtt } from "@/contexts/MqttContext";
 
 /** Cloud sync fallback worker when direct MQTT is unavailable */
 const CloudSyncWorker = () => {
-  const { intakeTags, ohtTags, wtpTags, setIntakeTags, setOhtTags, setWtpTags } = useScada();
-  const { isConnected } = useMqtt();
-  useCloudTelemetrySync({
-    intakeTags,
-    ohtTags,
-    wtpTags,
-    setIntakeTags,
-    setOhtTags,
-    setWtpTags,
-    isMqttConnected: isConnected,
-  });
-  return null;
+  useCloudTelemetrySync();
+  const { telemetryHealth } = useScada();
+  return telemetryHealth.state === 'error' ? (
+    <div role="status" className="border-b border-warning/30 bg-warning/10 px-4 py-2 text-sm text-center">
+      {telemetryHealth.message}
+    </div>
+  ) : null;
 };
 
 /** Bridge component connecting MQTT messages to SCADA state */

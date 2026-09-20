@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { logError, logDebug } from '@/lib/errorLogger';
+import { isTagLive } from '@/hooks/useTagConnection';
 import {
   ALL_OHT_SENSORS, INTAKE_SENSORS, WTP_SENSORS, ALL_SENSORS,
   MohgaonSensor, OHT1_SENSORS, OHT2_SENSORS, OHT3_SENSORS, OHT4_SENSORS,
@@ -21,6 +22,8 @@ export const getDefaultSetpoints = (sensor: MohgaonSensor): { high: number | nul
       return { high: sensor.section === 'wtp' && sensor.id.includes('TA-IN') ? 50 : 5, low: null };
     case 'chlorine': // Chlorine: 0.2-1.0 mg/L safe range
       return { high: 1.0, low: 0.2 };
+    case 'temperature':
+      return { high: 35, low: 5 };
     case 'combined_pt': // Combined pressure
       return { high: sensor.max * 0.8, low: sensor.max * 0.1 };
     default:
@@ -72,6 +75,8 @@ interface ScadaState {
 }
 
 interface ScadaContextType extends ScadaState {
+  telemetryHealth: {state:'connecting'|'connected'|'error';checkedAt:Date|null;message:string|null};
+  setTelemetryHealth: React.Dispatch<React.SetStateAction<{state:'connecting'|'connected'|'error';checkedAt:Date|null;message:string|null}>>;
   setPlantName: (name: string) => void;
   setConfigMode: (mode: boolean) => void;
   updateTagSetpoints: (section: 'intake' | 'oht' | 'wtp', tagId: string, high?: number, low?: number) => void;
@@ -111,6 +116,7 @@ export const ScadaProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [wtpTags, setWtpTags] = useState<TagData[]>(() => WTP_SENSORS.map(sensorToTag));
   const [isLoading, setIsLoading] = useState(true);
   const [mqttEnabled, setMqttEnabled] = useState(true);
+  const [telemetryHealth, setTelemetryHealth] = useState<{state:'connecting'|'connected'|'error';checkedAt:Date|null;message:string|null}>({state:'connecting',checkedAt:null,message:null});
 
   useEffect(() => {
     const loadConfig = async () => {
@@ -220,12 +226,13 @@ export const ScadaProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   }, []);
 
   const getActiveTagCount = useCallback(() => {
-    return [...intakeTags, ...ohtTags, ...wtpTags].filter(t => !t.notInstalled && t.instrumentType !== 'pump' && t.status === 'connected').length;
+    return [...intakeTags, ...ohtTags, ...wtpTags].filter(t => !t.notInstalled && t.instrumentType !== 'pump' && isTagLive(t)).length;
   }, [intakeTags, ohtTags, wtpTags]);
 
   return (
     <ScadaContext.Provider value={{
       plantName, intakeTags, ohtTags, wtpTags, configMode, isLoading, mqttEnabled,
+      telemetryHealth, setTelemetryHealth,
       setPlantName, setConfigMode, updateTagSetpoints, updateTagAlarmSettings,
       getActiveTagCount, setIntakeTags, setOhtTags, setWtpTags, setMqttEnabled,
     }}>

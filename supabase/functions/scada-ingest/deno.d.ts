@@ -30,6 +30,10 @@ declare namespace Deno {
   ): Promise<void>;
 }
 
+declare namespace EdgeRuntime {
+  function waitUntil(promise: Promise<unknown>): void;
+}
+
 // Map Deno-style URL imports to their npm equivalents so TypeScript can
 // resolve types from the root node_modules folder.
 

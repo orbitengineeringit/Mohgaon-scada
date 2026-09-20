@@ -1,174 +1,87 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { TagData } from '@/contexts/ScadaContext';
-import { PT_TO_PUMP_MAP } from '@/config/mohgaonSensors';
-import { logError, logInfo } from '@/lib/errorLogger';
+import { type TagData, useScada } from '@/contexts/ScadaContext';
 import { normalizeTelemetryValue, TELEMETRY_OFFLINE_MS } from '@/lib/telemetryQuality';
+import { logError } from '@/lib/errorLogger';
 
-interface CloudSyncProps {
-  intakeTags: TagData[];
-  ohtTags: TagData[];
-  wtpTags: TagData[];
-  setIntakeTags: React.Dispatch<React.SetStateAction<TagData[]>>;
-  setOhtTags: React.Dispatch<React.SetStateAction<TagData[]>>;
-  setWtpTags: React.Dispatch<React.SetStateAction<TagData[]>>;
-  isMqttConnected: boolean;
+export interface TelemetryRow {
+  tag_id: string;
+  value: number | null;
+  quality: string;
+  received_at: string;
 }
 
-export const useCloudTelemetrySync = ({
-  intakeTags,
-  ohtTags,
-  wtpTags,
-  setIntakeTags,
-  setOhtTags,
-  setWtpTags,
-  isMqttConnected,
-}: CloudSyncProps) => {
-  const [isCloudActive, setIsCloudActive] = useState(false);
-  const [lastSyncAt, setLastSyncAt] = useState<Date | null>(null);
-  const isSyncingRef = useRef(false);
+/** Never roll a newer MQTT/realtime reading back with an older cloud response. */
+export function applyCloudReading(tag: TagData, row: TelemetryRow, now = Date.now()): TagData {
+  const at = Date.parse(row.received_at);
+  if (!Number.isFinite(at) || at > now + 10000) return tag;
+  if (tag.lastDataTime && at <= new Date(tag.lastDataTime).getTime()) return tag;
+  const value = row.value === null ? null : normalizeTelemetryValue(row.value, tag);
+  const fresh = now - at <= TELEMETRY_OFFLINE_MS;
+  const fault = row.quality !== 'good' || value === null;
+  return {
+    ...tag, value: value ?? tag.value, status: !fresh ? 'disconnected' : fault ? 'fault' : 'connected',
+    source: 'mqtt', isActive: fresh && !fault,
+    lastDataTime: new Date(at), timestamp: new Date(at),
+  };
+}
 
-  const applyTelemetryData = useCallback((telemetry: Record<string, { value: number; timestamp?: string } | number>) => {
-    const now = new Date();
-
-    const updateTags = (setter: React.Dispatch<React.SetStateAction<TagData[]>>) => {
-      setter(prev => prev.map(tag => {
-        const rawEntry = telemetry[tag.id];
-        if (rawEntry === undefined) return tag;
-
-        const val = typeof rawEntry === 'object' && rawEntry !== null ? rawEntry.value : rawEntry;
-        if (typeof val !== 'number') return tag;
-        const normalizedValue = normalizeTelemetryValue(val, tag);
-        if (normalizedValue === null) return tag;
-
-        const entryTs = typeof rawEntry === 'object' && rawEntry !== null && rawEntry.timestamp 
-          ? new Date(rawEntry.timestamp) 
-          : now;
-        const elapsedMs = now.getTime() - entryTs.getTime();
-        // Cloud timestamps are receive times. A cellular pause is treated as
-        // delayed first and offline only after the shared hard timeout.
-        const isFresh = elapsedMs <= TELEMETRY_OFFLINE_MS;
-        const tagStatus = isFresh ? ('connected' as const) : ('disconnected' as const);
-
-        return {
-          ...tag,
-          value: isFresh ? normalizedValue : (tag.value ?? normalizedValue),
-          status: tagStatus,
-          source: 'mqtt' as const,
-          isActive: isFresh,
-          lastDataTime: entryTs,
-          timestamp: entryTs,
-        };
-      }));
-    };
-
-    updateTags(setIntakeTags);
-    updateTags(setOhtTags);
-    updateTags(setWtpTags);
-
-    // Update derived pump states (Only if PT sensor is actually fresh & connected)
-    const applyPumps = (setter: React.Dispatch<React.SetStateAction<TagData[]>>) => {
-      setter(prev => {
-        return prev.map(tag => {
-          if (tag.instrumentType === 'pump') {
-            const ptTag = prev.find(t => PT_TO_PUMP_MAP[t.id] === tag.id);
-            if (ptTag && ptTag.status === 'connected' && ptTag.lastDataTime && ptTag.value !== null) {
-              const isRunning = ptTag.value > 1.5 ? 1 : 0;
-              return {
-                ...tag,
-                value: isRunning,
-                status: 'connected' as const,
-                source: 'mqtt' as const,
-                isActive: isRunning === 1,
-                lastDataTime: ptTag.lastDataTime,
-                timestamp: ptTag.timestamp || now,
-              };
-            } else {
-              // If PT sensor has not received fresh data or is disconnected, pump is OFF and disconnected
-              return {
-                ...tag,
-                value: 0,
-                status: 'disconnected' as const,
-                isActive: false,
-              };
-            }
-          }
-          return tag;
-        });
-      });
-    };
-
-    applyPumps(setIntakeTags);
-    applyPumps(setWtpTags);
-
-    setIsCloudActive(true);
-    setLastSyncAt(now);
+export const useCloudTelemetrySync = () => {
+  const { setIntakeTags, setOhtTags, setWtpTags, setTelemetryHealth } = useScada();
+  const syncing = useRef(false);
+  const apply = useCallback((rows: TelemetryRow[]) => {
+    const byId = new Map(rows.map(r => [r.tag_id, r]));
+    const update = (tags: TagData[]) => tags.map(tag => {
+      const row = byId.get(tag.id);
+      return row ? applyCloudReading(tag, row) : tag;
+    });
+    setIntakeTags(update); setOhtTags(update); setWtpTags(update);
   }, [setIntakeTags, setOhtTags, setWtpTags]);
 
-  const syncLatestFromCloud = useCallback(async () => {
-    if (isSyncingRef.current) return;
-    isSyncingRef.current = true;
-
-    try {
-      // Step 1: Fast query from historian_logs for immediate display
-      const { data: logs, error: logErr } = await supabase
-        .from('historian_logs')
-        .select('tag_id, value, timestamp, section')
-        .order('timestamp', { ascending: false })
-        .limit(100);
-
-      if (!logErr && logs && logs.length > 0) {
-        const latestMap: Record<string, { value: number; timestamp: string }> = {};
-        logs.forEach(l => {
-          if (l.tag_id && l.value !== null && !latestMap[l.tag_id]) {
-            latestMap[l.tag_id] = { value: l.value, timestamp: l.timestamp };
-          }
-        });
-        if (Object.keys(latestMap).length > 0) {
-          applyTelemetryData(latestMap);
-        }
-      }
-
-      // Step 2: Trigger scada-ingest edge function to pull fresh live broker snapshot
-      // Live mode never writes historian rows. The server-side 5-minute cron is
-      // the single historian writer, independent of how many browsers are open.
-      const { data: ingestData, error: ingestErr } = await supabase.functions.invoke('scada-ingest', {
-        body: { mode: 'live' },
-      });
-      if (!ingestErr && ingestData?.telemetry) {
-        applyTelemetryData(ingestData.telemetry);
-        logInfo('CloudTelemetry', `Synced ${Object.keys(ingestData.telemetry).length} live tags via Cloud Ingest`);
-      }
-    } catch (err) {
-      logError('useCloudTelemetrySync', err);
-    } finally {
-      isSyncingRef.current = false;
-    }
-  }, [applyTelemetryData]);
-
-  // Initial and periodic sync when MQTT is disconnected
   useEffect(() => {
-    if (isMqttConnected) {
-      setIsCloudActive(false);
-      return;
-    }
-
-    // Run initial sync immediately
-    syncLatestFromCloud();
-
-    // Poll every 30 seconds for live updates
-    const interval = setInterval(() => {
-      if (!isMqttConnected) {
-        syncLatestFromCloud();
-      }
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [isMqttConnected, syncLatestFromCloud]);
-
-  return {
-    isCloudActive,
-    lastSyncAt,
-    syncLatestFromCloud,
-  };
+    let stopped = false;
+    const sync = async () => {
+      if (syncing.current) return;
+      syncing.current = true;
+      try {
+        const signal = AbortSignal.timeout(12000);
+        const [latest, runs] = await Promise.all([
+          supabase.from('telemetry_latest').select('tag_id,value,quality,received_at').abortSignal(signal),
+          supabase.from('telemetry_ingest_runs').select('status,connected_at,last_message_at,started_at,error_message')
+            .order('started_at', {ascending:false}).limit(3).abortSignal(signal),
+        ]);
+        if (stopped) return;
+        if (latest.error) throw latest.error;
+        if (runs.error) throw runs.error;
+        apply(latest.data || []);
+        const healthy = (runs.data || []).some(r =>
+          !!r.connected_at && ['connected','receiving','completed','no_data'].includes(r.status) &&
+          Date.now() - Date.parse(r.started_at) < 120000);
+        setTelemetryHealth({
+          state: healthy ? 'connected' : 'error', checkedAt: new Date(),
+          message: healthy ? null : 'Data collector unavailable; readings retain their last received time.',
+        });
+      } catch (err) {
+        if (!stopped) {
+          logError('CloudTelemetry',err);
+          setTelemetryHealth({state:'error',checkedAt:new Date(),message:'Live data connection unavailable. Retrying automatically.'});
+        }
+      } finally { syncing.current = false; }
+    };
+    const channel = supabase.channel('telemetry-live')
+      .on('postgres_changes',{event:'*',schema:'public',table:'telemetry_latest'}, event => {
+        if (!stopped && 'tag_id' in event.new) apply([event.new as TelemetryRow]);
+      }).subscribe(status => { if (status === 'SUBSCRIBED') void sync(); });
+    void sync();
+    const timer = setInterval(sync,10000);
+    const wake = () => { if (document.visibilityState === 'visible') void sync(); };
+    window.addEventListener('online',sync);
+    document.addEventListener('visibilitychange',wake);
+    return () => {
+      stopped = true; clearInterval(timer);
+      window.removeEventListener('online',sync);
+      document.removeEventListener('visibilitychange',wake);
+      void supabase.removeChannel(channel);
+    };
+  }, [apply,setTelemetryHealth]);
 };

@@ -62,6 +62,7 @@ const MqttContext = createContext<MqttContextType | undefined>(undefined);
 
 export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message: MqttMessage) => void }> = ({ children, onMessage }) => {
   const [config, setConfig] = useState<MqttConfig>(defaultConfig);
+  const [configLoaded, setConfigLoaded] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const onMessageRef = useRef(onMessage);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -138,7 +139,6 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
             topics: mergedTopics,
           });
           setTopicsFromDb(mergedTopics);
-          connectRef.current?.();
         } else {
           // No DB config — still apply credentials and topics if loaded
           if (vaultTopics || mqttUsername) {
@@ -150,11 +150,11 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
             }));
             if (vaultTopics) setTopicsFromDb(vaultTopics);
           }
-          connectRef.current?.();
         }
       } catch (error) {
         logError('MqttContext.loadConfig', error);
-        connectRef.current?.();
+      } finally {
+        setConfigLoaded(true);
       }
     };
     loadConfig();
@@ -285,6 +285,9 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
 
   const connect = useCallback(async () => {
     if (isConnectingRef.current || clientRef.current?.connected) return;
+    // This broker's 8080 listener has no working TLS websocket endpoint.
+    // HTTPS dashboards receive the server TCP collector via Supabase Realtime.
+    if (window.location.protocol === 'https:' && config.brokerUrl.includes('mqtt.orbitengineerings.com:8080')) return;
     isConnectingRef.current = true;
     setIsConnecting(true);
     setLastError(null);
@@ -302,7 +305,7 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
     try {
       const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
       const options: IClientOptions = {
-        clientId: config.clientId || `mohgaon_${Math.random().toString(16).substr(2, 8)}`,
+        clientId: `${config.clientId || 'mohgaon'}_${Math.random().toString(16).slice(2, 10)}`,
         clean: true,
         connectTimeout: 8000,
         reconnectPeriod: isHttps ? 20000 : 3000, // On HTTPS if broker SSL is missing, gracefully retry every 20s
@@ -314,6 +317,7 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
       clientRef.current = client;
 
       client.on('connect', () => {
+        if (clientRef.current !== client) return;
         setIsConnected(true);
         setIsConnecting(false);
         isConnectingRef.current = false;
@@ -346,7 +350,8 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
         };
       })();
 
-      client.on('message', (topic, payload) => {
+      client.on('message', (topic, payload, packet) => {
+        if (clientRef.current !== client || packet.retain) return;
         const payloadStr = payload.toString();
         const parsedData = parsePayload(payloadStr);
         const { section, subsection } = determineSectionFromTopic(topic, payloadStr);
@@ -360,6 +365,7 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
       });
 
       client.on('error', (err) => {
+        if (clientRef.current !== client) return;
         logError('MqttContext.connection', err);
         setLastError(err.message);
         setIsConnecting(false);
@@ -367,6 +373,7 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
       });
 
       client.on('close', () => {
+        if (clientRef.current !== client) return;
         setIsConnected(false);
         setIsConnecting(false);
         isConnectingRef.current = false;
@@ -377,6 +384,7 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
       });
 
       client.on('offline', () => {
+        if (clientRef.current !== client) return;
         setIsConnected(false);
         setIsConnecting(false);
         isConnectingRef.current = false;
@@ -389,6 +397,9 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
   }, [config, isConnecting, isConnected, parsePayload, determineSectionFromTopic]);
 
   useEffect(() => { connectRef.current = connect; }, [connect]);
+  useEffect(() => {
+    if (configLoaded && config.autoConnect) void connectRef.current?.();
+  }, [configLoaded, config]);
 
   const disconnect = useCallback(() => {
     if (clientRef.current) {

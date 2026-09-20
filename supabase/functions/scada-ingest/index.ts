@@ -211,11 +211,10 @@ function parsePayload(payload: string): Record<string, string | number>[] {
           if (item && typeof item === "object") {
             // PLC/RTU explicitly reports sensor quality in `err`. Never turn a
             // known bad instrument reading into live or historical data.
-            if (item.err !== undefined && String(item.err) !== "0") return;
             const keyName = item.name ?? item.tag ?? item.key;
             const val = item.value ?? item.val;
             if (keyName !== undefined && val !== undefined) {
-              results.push({ [String(keyName)]: val });
+              results.push({ [String(keyName)]: item.err !== undefined && String(item.err) !== '0' ? NaN : val });
             }
           }
         });
@@ -244,7 +243,7 @@ function parsePayload(payload: string): Record<string, string | number>[] {
           const keyName = item.name ?? item.tag ?? item.key;
           const val = item.value ?? item.val;
           if (keyName !== undefined && val !== undefined) {
-            results.push({ [String(keyName)]: val });
+            results.push({ [String(keyName)]: item.err !== undefined && String(item.err) !== '0' ? NaN : val });
           } else {
             results.push(item);
           }
@@ -283,22 +282,33 @@ function topicSetup(cfg: MqttConfig | null) {
     [topics.OHT3, { section: "oht", subsection: "OHT-3" }],
     [topics.OHT4, { section: "oht", subsection: "OHT-4" }],
   ]);
-  return { topics: Object.values(topics).filter(Boolean), topicToSection };
+  // Subscribe to the commissioned paths as well as configured legacy aliases.
+  for (const [key, path] of Object.entries(DEFAULT_TOPICS)) {
+    topicToSection.set(path, key === 'INTAKE' ? { section: 'intake' } : key === 'WTP'
+      ? { section: 'wtp' } : { section: 'oht', subsection: `OHT-${key.slice(3)}` });
+  }
+  return { topics: [...topicToSection.keys()].filter(Boolean), topicToSection };
 }
 
 function normalizeBrokerUrl(url: string | null | undefined): string {
-  let raw = url || "ws://mqtt.orbitengineerings.com:8080";
-  if (raw.includes("broker.hivemq.com") || raw.startsWith("mqtt://") || raw.startsWith("mqtts://")) {
-    raw = "ws://mqtt.orbitengineerings.com:8080";
+  let raw = Deno.env.get("MQTT_BACKEND_URL") || url || "mqtt://mqtt.orbitengineerings.com:1883";
+  if (raw.includes("mqtt.orbitengineerings.com") && /^wss?:/.test(raw)) {
+    return "mqtt://mqtt.orbitengineerings.com:1883";
+  }
+  if (raw.includes("broker.hivemq.com")) {
+    raw = "mqtt://mqtt.orbitengineerings.com:1883";
   }
   return raw;
 }
 
-async function collectSnapshot(cfg: MqttConfig | null, captureWindowMs: number): Promise<ParsedMessage[]> {
+async function collectSnapshot(
+  cfg: MqttConfig | null, captureWindowMs: number,
+  onMessage?: (message: ParsedMessage) => Promise<void>,
+  onConnected?: () => Promise<void>,
+): Promise<ParsedMessage[]> {
   const brokerUrl = normalizeBrokerUrl(cfg?.broker_url);
   const { topics, topicToSection } = topicSetup(cfg);
   const messages: ParsedMessage[] = [];
-  const seenTopics = new Set<string>();
 
   return await new Promise((resolve, reject) => {
     const client = mqtt.connect(brokerUrl, {
@@ -308,41 +318,107 @@ async function collectSnapshot(cfg: MqttConfig | null, captureWindowMs: number):
       protocolVersion: 4,
       clean: true,
       connectTimeout: 10_000,
-      reconnectPeriod: 0,
+      reconnectPeriod: onMessage ? 2000 : 0,
       keepalive: 15,
     });
     let settled = false;
+    let writes = Promise.resolve();
+    let writeError: Error | undefined;
 
     const finish = (err?: Error) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       try { client.end(true); } catch { /* ignore */ }
-      if (err && messages.length === 0) reject(err);
-      else resolve(messages);
+      writes.then(() => {
+        if (writeError) reject(writeError);
+        else if (err && messages.length === 0) reject(err);
+        else resolve(messages);
+      });
     };
     const timer = setTimeout(() => finish(), captureWindowMs);
 
     client.on("connect", () => {
       console.log(`Connected to MQTT broker at ${brokerUrl}, subscribing to: ${topics.join(", ")}`);
       client.subscribe(topics, { qos: 0 }, (err: Error | null) => { if (err) finish(err); });
+      if (onConnected) writes = writes.then(onConnected).catch(err => { writeError = err; });
     });
-    client.on("message", (topic: string, payload: Buffer) => {
-      console.log(`Received message on topic: ${topic}, payload length: ${payload.length}`);
+    client.on("message", (topic: string, payload: Buffer, packet: { retain?: boolean }) => {
+      // Retained packets have no trustworthy acquisition timestamp in these RTUs.
+      if (settled || packet.retain) return;
       const mapped = topicToSection.get(topic) || { section: "unknown" as const };
       const combined: Record<string, string | number> = {};
       parsePayload(payload.toString()).forEach(part => Object.assign(combined, part));
       if (Object.keys(combined).length > 0) {
-        messages.push({ topic, payload: combined, timestamp: new Date(), ...mapped });
-        seenTopics.add(topic);
-      }
-      if (seenTopics.size >= topics.length) {
-        finish();
+        const message = { topic, payload: combined, timestamp: new Date(), ...mapped };
+        messages.push(message);
+        if (onMessage) writes = writes.then(() => onMessage(message)).catch(err => { writeError = err; });
       }
     });
-    client.on("error", (err: Error) => finish(err));
-    client.on("close", () => { if (!settled && messages.length > 0) finish(); });
+    client.on("error", (err: Error) => {
+      console.error('MQTT transport:', err.message);
+      if (!onMessage) finish(err);
+    });
+    client.on("close", () => { if (!onMessage && !settled && messages.length > 0) finish(); });
   });
+}
+
+function mapReadings(msg: ParsedMessage) {
+  if (msg.section === 'unknown') return [];
+  const sensors = SENSORS.filter(s => s.section === msg.section && (!s.subsection || s.subsection === msg.subsection) && s.mqttKey);
+  const rows = new Map<string, {tag_id: string; section: Section; value: number | null; quality: string; received_at: string; mqtt_topic: string}>();
+  for (const [key, raw] of Object.entries(msg.payload)) {
+    const sensor = sensors.find(s => mqttKeyMatches(s.mqttKey, key));
+    if (!sensor) continue;
+    let value = raw === '' || raw === null || typeof raw === 'boolean' ? NaN : Number(raw);
+    // WTP flow is already m³/hr; do not apply a litres-to-m³ conversion.
+    const normalized = normalizeSensorValue(sensor, value);
+    rows.set(sensor.id, {tag_id:sensor.id, section:sensor.section, value:normalized,
+      quality:normalized === null ? 'fault' : 'good', received_at:msg.timestamp.toISOString(), mqtt_topic:msg.topic});
+    const pump = PT_TO_PUMP[sensor.id];
+    if (pump) rows.set(pump, {tag_id:pump,section:sensor.section,value:normalized === null ? null : normalized > 1.5 ? 1 : 0,
+      quality:normalized === null ? 'fault' : 'good',received_at:msg.timestamp.toISOString(),mqtt_topic:msg.topic});
+  }
+  return [...rows.values()];
+}
+
+async function runCollector(supabase: ReturnType<typeof createClient>, cfg: MqttConfig | null, runId: string) {
+  let messages = 0, saved = 0;
+  try {
+    // Only insert missing definitions; preserve operator alarm configuration.
+    const { error: configError } = await supabase.from('tag_config').upsert(SENSORS.map(s => ({
+      tag_id:s.id,section:s.section,label:s.label,unit:s.unit,is_active:true,alarm_enabled:true,
+    })), {onConflict:'section,tag_id',ignoreDuplicates:true});
+    if (configError) throw configError;
+    await collectSnapshot(cfg, 75000, async message => {
+      const readings = mapReadings(message);
+      if (!readings.length) return;
+      let lastError;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const {data,error} = await supabase.rpc('ingest_telemetry',{readings});
+        if (!error) { saved += Number(data || 0); lastError = undefined; break; }
+        lastError = error;
+        await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
+      }
+      if (lastError) throw lastError;
+      messages++;
+      const {error} = await supabase.from('telemetry_ingest_runs').update({
+        status:'receiving',last_message_at:message.timestamp.toISOString(),message_count:messages,saved_count:saved,
+      }).eq('id',runId);
+      if (error) throw error;
+    }, async () => {
+      const {error} = await supabase.from('telemetry_ingest_runs').update({status:'connected',connected_at:new Date().toISOString()}).eq('id',runId);
+      if (error) throw error;
+    });
+    const {error} = await supabase.from('telemetry_ingest_runs').update({
+      status:messages ? 'completed' : 'no_data',finished_at:new Date().toISOString(),message_count:messages,saved_count:saved,
+    }).eq('id',runId);
+    if (error) throw error;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : JSON.stringify(err);
+    console.error('Collector failed:', message);
+    await supabase.from('telemetry_ingest_runs').update({status:'failed',finished_at:new Date().toISOString(),error_message:message}).eq('id',runId);
+  }
 }
 
 Deno.serve(async (req: Request) => {
@@ -354,11 +430,12 @@ Deno.serve(async (req: Request) => {
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
   try {
-    let mode: "snapshot" | "live" = "snapshot";
+    let mode: "snapshot" | "live" | "collect" = "snapshot";
     if (req.method === "POST") {
       try {
         const body = await req.json();
         if (body?.mode === "live") mode = "live";
+        if (body?.mode === "collect") mode = "collect";
       } catch {
         // pg_cron sends an empty body; that is the normal persistent snapshot.
       }
@@ -368,97 +445,46 @@ Deno.serve(async (req: Request) => {
     const apiKey = req.headers.get("apikey");
     const authHeader = req.headers.get("Authorization");
     const cronKey = req.headers.get("x-cron-key");
-    const isAuthorized = (!!cronKey && cronKey === cfgRow?.cron_secret) ||
-                         (!!apiKey && apiKey.length > 20) ||
-                         (!!authHeader && authHeader.length > 20);
+    const isCron = !!cronKey && cronKey === cfgRow?.cron_secret;
+    const token = authHeader?.replace(/^Bearer\s+/i, '') || '';
+    const {data: authData} = !isCron && token ? await supabase.auth.getUser(token) : {data:{user:null}};
+    const isAuthorized = isCron || (mode === 'live' && !!authData.user);
 
     if (!isAuthorized) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const { data: mqttCfg } = await supabase.from("mqtt_config").select("*").limit(1).maybeSingle();
-    // A 12-second early exit used to miss the second station because healthy
-    // RTUs publish about every 19 seconds. Live fallback waits 30 seconds;
-    // persistent cron snapshots observe a wider 50-second multi-topic window.
-    const messages = await collectSnapshot(mqttCfg as MqttConfig | null, mode === "live" ? 30_000 : 50_000);
-    if (messages.length === 0) throw new Error("No MQTT messages received during capture window");
-
-    // Wall-clock-bucketed timestamp: floor to nearest 5-minute boundary
-    // This ensures all records in this snapshot share the same aligned timestamp,
-    // making historical grouping/display clean and consistent.
-    const SNAPSHOT_INTERVAL_MS = 5 * 60 * 1000;
-    const alignedTs = new Date(Math.floor(Date.now() / SNAPSHOT_INTERVAL_MS) * SNAPSHOT_INTERVAL_MS).toISOString();
-
-    const byTag = new Map<string, { sensor: Sensor; value: number; topic: string; at: string; receivedAt: string }>();
-    for (const msg of messages) {
-      if (msg.section === "unknown") continue;
-      const sensors = SENSORS.filter(s => s.section === msg.section && (!s.subsection || s.subsection === msg.subsection) && s.mqttKey);
-      for (const [mqttKey, rawValue] of Object.entries(msg.payload)) {
-        // Use alias-aware matching instead of strict exact match
-        const sensor = sensors.find(s => mqttKeyMatches(s.mqttKey, mqttKey));
-        if (!sensor) continue;
-        let value = typeof rawValue === "string" ? Number.parseFloat(rawValue) : Number(rawValue);
-        if (!Number.isFinite(value) || value > 1e30) continue;
-        // Unit conversion: RTU sends RAW_EFM_FLOW and CLR_EFM_FLOW in L/hr; store as m³/hr
-        if ((mqttKey === 'RAW_EFM_FLOW' || mqttKey === 'CLR_EFM_FLOW') && sensor.unit === 'm³/hr') {
-          value = value / 1000;
-        }
-        // Percentage level/valve transmitters may report a small calibrated
-        // saturation beyond 0..100. Clamp only the narrow +/-2% end-stop band;
-        // every larger excursion remains an invalid sensor reading.
-        const cleanValue = normalizeSensorValue(sensor, value);
-        if (cleanValue === null) {
-          console.warn(`Rejected out-of-range reading ${sensor.id}=${value} (valid ${sensor.min}..${sensor.max})`);
-          continue;
-        }
-        // Use aligned timestamp instead of raw MQTT message time
-        byTag.set(`${sensor.section}-${sensor.id}`, {
-          sensor,
-          value: cleanValue,
-          topic: msg.topic,
-          at: alignedTs,
-          receivedAt: msg.timestamp.toISOString(),
-        });
-
-        const pumpId = PT_TO_PUMP[sensor.id];
-        if (pumpId) {
-          const pump = SENSORS.find(s => s.id === pumpId && s.section === sensor.section);
-          if (pump) byTag.set(`${pump.section}-${pump.id}`, {
-            sensor: pump,
-            value: cleanValue > 1.5 ? 1 : 0,
-            topic: msg.topic,
-            at: alignedTs,
-            receivedAt: msg.timestamp.toISOString(),
-          });
-        }
-      }
+    if (mode === 'collect') {
+      const runId = crypto.randomUUID();
+      const {error} = await supabase.from('telemetry_ingest_runs').insert({id:runId});
+      if (error) throw error;
+      // Respond before pg_net's deadline. The worker explicitly owns the job.
+      EdgeRuntime.waitUntil(runCollector(supabase, mqttCfg as MqttConfig | null, runId));
+      return new Response(JSON.stringify({accepted:true,run_id:runId}), {status:202,headers:{...corsHeaders,'Content-Type':'application/json'}});
     }
-
-    const buildTelemetry = () => {
-      const telemetry: Record<string, { value: number; timestamp: string; section: string }> = {};
-      for (const entry of Array.from(byTag.values())) {
-        telemetry[entry.sensor.id] = {
-          value: entry.value,
-          timestamp: entry.receivedAt,
-          section: entry.sensor.section,
-        };
-      }
-      return telemetry;
-    };
-
-    // Browser fallback requests are read-only. Only pg_cron owns the aligned
-    // 5-minute historian snapshots, so opening several dashboards cannot create
-    // duplicate history rows.
-    if (mode === "live") {
-      return new Response(JSON.stringify({
-        success: true,
-        mode,
-        saved_count: 0,
-        received_topics: Array.from(new Set(messages.map(m => m.topic))).length,
-        duration_ms: Date.now() - started,
-        telemetry: buildTelemetry(),
-      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (mode === 'live') {
+      const {data,error} = await supabase.from('telemetry_latest').select('*');
+      if (error) throw error;
+      const telemetry = Object.fromEntries((data || []).map(row => [row.tag_id,{
+        value:row.value,timestamp:row.received_at,quality:row.quality,section:row.section,
+      }]));
+      return new Response(JSON.stringify({success:true,mode,saved_count:0,telemetry}), {headers:{...corsHeaders,'Content-Type':'application/json'}});
     }
+    // Scheduled alarm/consumption processing reads the durable collector cache.
+    // It never opens a second sampling window or writes a cached value as new history.
+    const { data: latestRows, error: latestError } = await supabase.from('telemetry_latest')
+      .select('*').eq('quality','good').gte('received_at',new Date(Date.now()-5*60*1000).toISOString());
+    if (latestError) throw latestError;
+    const byTag = new Map<string, {sensor:Sensor;value:number;topic:string;at:string;receivedAt:string}>();
+    for (const row of latestRows || []) {
+      const sensor = SENSORS.find(s => s.id === row.tag_id);
+      if (sensor && row.value !== null) byTag.set(sensor.id,{
+        sensor,value:row.value,topic:row.mqtt_topic,at:row.received_at,receivedAt:row.received_at,
+      });
+    }
+    if (!byTag.size) return new Response(JSON.stringify({success:true,saved_count:0,message:'No recent telemetry'}),
+      {headers:{...corsHeaders,'Content-Type':'application/json'}});
 
     const tagRows = Array.from(byTag.values()).map(({ sensor }) => ({
       section: sensor.section, tag_id: sensor.id, label: sensor.label, unit: sensor.unit,
@@ -486,52 +512,6 @@ Deno.serve(async (req: Request) => {
       .select("id,section,tag_id,high_setpoint,low_setpoint,alarm_enabled")
       .in("tag_id", uniqueTagRows.map(r => r.tag_id));
     if (cfgErr) throw new Error(`tag_config lookup failed: ${cfgErr.message}`);
-    const configMap = new Map((configs || []).map((r: any) => [`${r.section}-${r.tag_id}`, r.id]));
-
-    // Sort entries in INTAKE → WTP → OHT1 → OHT2 → OHT3 → OHT4 order
-    const sortedEntries = Array.from(byTag.values())
-      .filter(({ sensor }) => configMap.has(`${sensor.section}-${sensor.id}`))
-      .sort((a, b) => {
-        const orderA = getSectionSortKey(a.sensor.section, a.sensor.id);
-        const orderB = getSectionSortKey(b.sensor.section, b.sensor.id);
-        if (orderA !== orderB) return orderA - orderB;
-        return a.sensor.id.localeCompare(b.sensor.id);
-      });
-
-    const logs = sortedEntries.map(({ sensor, value, topic, at }) => ({
-        tag_config_id: configMap.get(`${sensor.section}-${sensor.id}`),
-        tag_id: sensor.id,
-        section: sensor.section,
-        value,
-        timestamp: at,
-        source: "backend:5min",
-        mqtt_topic: topic,
-        snapshot_key: `${sensor.section}:${sensor.id}:${at}`,
-      }));
-
-    // FIX 2: Per-section bucket guard — check each section independently.
-    // Previously a single global check caused WTP/OHT data to be silently
-    // skipped whenever Intake had already been saved in the same 5-min bucket.
-    const sectionsPresentInSnapshot = [...new Set(logs.map(l => l.section))];
-    const { data: existingBuckets } = await supabase
-      .from("historian_logs")
-      .select("section")
-      .eq("timestamp", alignedTs)
-      .in("section", sectionsPresentInSnapshot);
-
-    const savedSections = new Set((existingBuckets || []).map((r: any) => r.section));
-    const logsToSave = logs.filter(l => !savedSections.has(l.section));
-
-    if (logsToSave.length > 0) {
-      console.log(`Inserting ${logsToSave.length} historian records for 5-min snapshot at ${alignedTs} (sections: ${[...new Set(logsToSave.map(l => l.section))].join(", ")})`);
-      const { error: insertErr } = await supabase
-        .from("historian_logs")
-        .upsert(logsToSave, { onConflict: "snapshot_key", ignoreDuplicates: true });
-      if (insertErr) console.error(`historian insert failed: ${insertErr.message}`);
-    } else {
-      console.log(`Live sync: All sections already saved for bucket ${alignedTs}. Returning live telemetry in-memory.`);
-    }
-
     // Backend Alarm Detection & Debounce (bulk query)
     const alarmsToInsert: any[] = [];
     const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
@@ -598,10 +578,9 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({
       success: true,
       mode,
-      saved_count: logsToSave.length,
-      received_topics: Array.from(new Set(messages.map(m => m.topic))).length,
+      saved_count: 0,
+      checked_tags: byTag.size,
       duration_ms: Date.now() - started,
-      telemetry: buildTelemetry(),
     }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (err) {
     console.error("scada-ingest failed", err);

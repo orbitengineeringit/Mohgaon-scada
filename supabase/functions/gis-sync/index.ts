@@ -186,16 +186,15 @@ Deno.serve(async (req) => {
     const allIds = [...intakeIds, ...wtpIds, ...ohtIds];
 
     const { data: rows, error: hErr } = await supabase
-      .from("historian_logs")
-      .select("tag_id, value, timestamp")
+      .from("telemetry_latest")
+      .select("tag_id, value, received_at, quality")
       .in("tag_id", allIds)
-      .order("timestamp", { ascending: false })
-      .limit(2000);
-    if (hErr) throw new Error(`historian_logs: ${hErr.message}`);
+      .order("received_at", { ascending: false });
+    if (hErr) throw new Error(`telemetry_latest: ${hErr.message}`);
 
     const latest = new Map<string, { value: number; timestamp: string }>();
     for (const r of rows ?? []) {
-      if (!latest.has(r.tag_id)) latest.set(r.tag_id, { value: Number(r.value), timestamp: r.timestamp });
+      if (!latest.has(r.tag_id)) latest.set(r.tag_id, { value: r.quality === 'good' && r.value !== null ? Number(r.value) : NaN, timestamp: r.received_at });
     }
     const nowMs = Date.now();
     const fresh = (id: string) => {

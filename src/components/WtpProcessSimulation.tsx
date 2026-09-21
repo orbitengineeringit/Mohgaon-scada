@@ -768,7 +768,8 @@ const WtpProcessSimulation: React.FC = () => {
         tags={wtpTags}
         sensorIds={[
           'WTP-Flow-IN','WTP-Flow-OUT','WTP-LT-BW','WTP-LT-CW','WTP-PH-IN','WTP-TA-IN','WTP-PH','WTP-CL','WTP-TA',
-          'WTP-Totalizer-IN','WTP-Totalizer-OUT','WTP-PT1','WTP-PT2','WTP-HeaderPT','WTP-TEM'
+          'WTP-Totalizer-IN','WTP-Totalizer-OUT','WTP-PT1','WTP-PT2','WTP-HeaderPT','WTP-TEM',
+          'WTP-Pump1','WTP-Pump2'
         ]}
       />
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>

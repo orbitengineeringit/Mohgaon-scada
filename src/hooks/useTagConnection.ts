@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react';
 import type { TagData } from '@/contexts/ScadaContext';
-import { TELEMETRY_LIVE_MS, TELEMETRY_OFFLINE_MS, telemetryAgeMs } from '@/lib/telemetryQuality';
+import { TELEMETRY_LIVE_MS, TELEMETRY_OFFLINE_MS, telemetryAgeMs, isZeroValue } from '@/lib/telemetryQuality';
 
 /**
  * Single source of truth for sensor status indicator state across the dashboard.
  *
  * Returns one of:
- *  - 'connected' : Active communication (value is non-zero).
- *  - 'inactive'  : Active communication (value is exactly 0.0).
+ *  - 'connected' : Active communication (value is non-zero / pump is running).
+ *  - 'inactive'  : Active communication (value is zero / pump is stopped).
  *  - 'no-data'   : Disconnected / Timeout (no data received).
+ *  - 'stale'     : Signal delayed beyond live threshold.
+ *  - 'fault'     : Hardware fault / out of engineering range.
  */
 export type ConnectionState = 'connected' | 'no-data' | 'inactive' | 'stale' | 'fault';
 
@@ -21,10 +23,14 @@ export const getTagConnection = (tag?: TagData | null): ConnectionState => {
   if (elapsed > TELEMETRY_LIVE_MS) return 'stale';
   
   // When live telemetry is arriving within timeout, determine active state:
-  // - Pumps: value=0 means pump is OFF (normal operation) — show 'connected' so pump card handles ON/OFF display
-  // - All other sensors: value=0 while connected = ZERO reading — show 'inactive' (blue ZERO badge)
-  if (tag.instrumentType === 'pump') return 'connected';
-  return tag.value === 0 ? 'inactive' : 'connected';
+  // - Pumps: value > 0.5 (or 1) means pump is RUNNING -> 'connected' (ON)
+  //          value <= 0.5 (or 0) means pump is STOPPED -> 'inactive' (OFF)
+  // - All other sensors: zero reading (accounting for deadband) -> 'inactive' (ZERO)
+  //                      valid non-zero reading -> 'connected' (ON)
+  if (tag.instrumentType === 'pump') {
+    return tag.value > 0.5 ? 'connected' : 'inactive';
+  }
+  return isZeroValue(tag.value, tag.instrumentType) ? 'inactive' : 'connected';
 };
 
 export const useTagConnection = (tag?: TagData | null): ConnectionState => {

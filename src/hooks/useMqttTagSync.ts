@@ -10,7 +10,7 @@ import {
   VALID_OHT_KEYS, VALID_INTAKE_KEYS, VALID_WTP_KEYS,
   MohgaonSensor, PT_TO_PUMP_MAP,
 } from '@/config/mohgaonSensors';
-import { normalizeTelemetryValue, TELEMETRY_OFFLINE_MS } from '@/lib/telemetryQuality';
+import { normalizeTelemetryValue, TELEMETRY_OFFLINE_MS, applyZeroDeadband } from '@/lib/telemetryQuality';
 
 interface TagUpdate {
   tagId: string;
@@ -473,7 +473,7 @@ export const useMqttTagSync = (
         }
       }
 
-      // --- MLTCV Layer 1: Numeric Precision (Rounding) ---
+      // --- MLTCV Layer 1: Numeric Precision (Rounding) & Zero-Deadband ---
       let roundedValue = rawValueAdjusted;
       if (sensor.instrumentType === 'pt' || sensor.instrumentType === 'combined_pt' || sensor.instrumentType === 'lt' || sensor.instrumentType === 'ph' || sensor.instrumentType === 'chlorine' || sensor.instrumentType === 'temperature') {
         roundedValue = Math.round(rawValueAdjusted * 100) / 100;
@@ -481,7 +481,8 @@ export const useMqttTagSync = (
         roundedValue = Math.round(rawValueAdjusted * 10) / 10;
       }
 
-      const displayValue = roundedValue;
+      // Eliminate residual zero-drift / low-flow noise on stopped lines
+      const displayValue = applyZeroDeadband(roundedValue, sensor.instrumentType);
       latestValues.set(sensorId, displayValue);
 
       // --- MLTCV Layer 3: Level vs Flow Validation (Echo Jitter Protection) ---

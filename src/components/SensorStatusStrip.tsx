@@ -31,43 +31,73 @@ const SensorStatusStrip: React.FC<SensorStatusStripProps> = ({ tags, sensorIds, 
           {activeCount}/{items.length}
         </span>
       </div>
-      {items.map(({ id, connection, label }) => {
+      {items.map(({ id, tag, connection, label }) => {
         let titleText = '';
         let badgeClass = '';
         let dotClass = '';
         let statusTextClass = '';
         let statusLabel = '';
 
-        if (connection === 'connected') {
-          titleText = `${label} — Receiving MQTT data`;
-          badgeClass = 'bg-success/10 text-success border-success/30';
-          dotClass = 'bg-success pulse-live';
-          statusTextClass = 'bg-success/20 text-success';
-          statusLabel = 'ON';
-        } else if (connection === 'inactive') {
-          titleText = `${label} — Active (Zero value)`;
-          badgeClass = 'bg-sky-500/10 text-sky-500 border-sky-500/30';
-          dotClass = 'bg-sky-500';
-          statusTextClass = 'bg-sky-500/20 text-sky-500';
-          statusLabel = 'ZERO';
-        } else if (connection === 'stale') {
-          titleText = `${label} — Signal delayed; showing last valid value`;
-          badgeClass = 'bg-warning/10 text-warning border-warning/30';
-          dotClass = 'bg-warning animate-pulse';
-          statusTextClass = 'bg-warning/20 text-warning';
-          statusLabel = 'DELAY';
-        } else if (connection === 'fault') {
-          titleText = `${label} — Sensor value outside valid range`;
-          badgeClass = 'bg-orange-500/10 text-orange-500 border-orange-500/30';
-          dotClass = 'bg-orange-500 animate-pulse';
-          statusTextClass = 'bg-orange-500/20 text-orange-500';
-          statusLabel = 'FAULT';
+        const isPump = tag?.instrumentType === 'pump';
+
+        if (isPump) {
+          if (connection === 'connected') {
+            titleText = `${label} — Pump Running (ON)`;
+            badgeClass = 'bg-success/10 text-success border-success/30';
+            dotClass = 'bg-success pulse-live';
+            statusTextClass = 'bg-success/20 text-success';
+            statusLabel = 'ON';
+          } else if (connection === 'inactive') {
+            titleText = `${label} — Pump Stopped (OFF)`;
+            badgeClass = 'bg-destructive/10 text-destructive border-destructive/30';
+            dotClass = 'bg-destructive';
+            statusTextClass = 'bg-destructive/20 text-destructive';
+            statusLabel = 'OFF';
+          } else if (connection === 'stale') {
+            titleText = `${label} — Signal delayed`;
+            badgeClass = 'bg-warning/10 text-warning border-warning/30';
+            dotClass = 'bg-warning animate-pulse';
+            statusTextClass = 'bg-warning/20 text-warning';
+            statusLabel = 'DELAY';
+          } else {
+            titleText = `${label} — Disconnected / No data`;
+            badgeClass = 'bg-destructive/10 text-destructive border-destructive/30';
+            dotClass = 'bg-destructive animate-pulse';
+            statusTextClass = 'bg-destructive/20 text-destructive';
+            statusLabel = 'OFF';
+          }
         } else {
-          titleText = `${label} — No data`;
-          badgeClass = 'bg-destructive/10 text-destructive border-destructive/30';
-          dotClass = 'bg-destructive animate-pulse';
-          statusTextClass = 'bg-destructive/20 text-destructive';
-          statusLabel = 'OFF';
+          if (connection === 'connected') {
+            titleText = `${label} — Receiving MQTT data`;
+            badgeClass = 'bg-success/10 text-success border-success/30';
+            dotClass = 'bg-success pulse-live';
+            statusTextClass = 'bg-success/20 text-success';
+            statusLabel = 'ON';
+          } else if (connection === 'inactive') {
+            titleText = `${label} — Active (Zero value)`;
+            badgeClass = 'bg-sky-500/10 text-sky-500 border-sky-500/30';
+            dotClass = 'bg-sky-500';
+            statusTextClass = 'bg-sky-500/20 text-sky-500';
+            statusLabel = 'ZERO';
+          } else if (connection === 'stale') {
+            titleText = `${label} — Signal delayed; showing last valid value`;
+            badgeClass = 'bg-warning/10 text-warning border-warning/30';
+            dotClass = 'bg-warning animate-pulse';
+            statusTextClass = 'bg-warning/20 text-warning';
+            statusLabel = 'DELAY';
+          } else if (connection === 'fault') {
+            titleText = `${label} — Sensor value outside valid range`;
+            badgeClass = 'bg-orange-500/10 text-orange-500 border-orange-500/30';
+            dotClass = 'bg-orange-500 animate-pulse';
+            statusTextClass = 'bg-orange-500/20 text-orange-500';
+            statusLabel = 'FAULT';
+          } else {
+            titleText = `${label} — No data`;
+            badgeClass = 'bg-destructive/10 text-destructive border-destructive/30';
+            dotClass = 'bg-destructive animate-pulse';
+            statusTextClass = 'bg-destructive/20 text-destructive';
+            statusLabel = 'OFF';
+          }
         }
 
         return (

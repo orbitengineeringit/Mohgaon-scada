@@ -44,3 +44,43 @@ export const telemetryAgeMs = (tag?: TagData | null, now = Date.now()): number |
   if (!Number.isFinite(receivedAt)) return null;
   return Math.max(0, now - receivedAt);
 };
+
+/**
+ * Industrial SCADA Zero-Cutoff / Deadband Filter:
+ * - Floating point underflow (Modbus IEEE 754): numbers with abs < 1e-5 -> 0
+ * - Pressure Transmitters (PT): 4-20mA ADC zero-drift / atmospheric residual (< 0.05 Bar) -> 0.0 Bar
+ * - Flow Meters: Electromagnetic meter low-flow cutoff / static pipe induction (< 0.15 m³/hr) -> 0.0 m³/hr
+ * - Level Transmitters (LT): Empty tank transducer noise (< 0.1%) -> 0.0%
+ * - Digital Pumps: value <= 0.5 -> 0
+ */
+export const applyZeroDeadband = (
+  value: number,
+  instrumentType?: string
+): number => {
+  if (!Number.isFinite(value)) return 0;
+  if (Math.abs(value) < 1e-5) return 0;
+
+  if (instrumentType === 'pt' || instrumentType === 'combined_pt') {
+    if (Math.abs(value) < 0.05) return 0;
+  } else if (instrumentType === 'flow') {
+    if (Math.abs(value) < 0.15) return 0;
+  } else if (instrumentType === 'lt') {
+    if (Math.abs(value) < 0.1) return 0;
+  } else if (instrumentType === 'pump') {
+    return value > 0.5 ? 1 : 0;
+  }
+
+  return value;
+};
+
+/**
+ * Returns true if a sensor value is effectively zero (taking noise/deadband into account).
+ */
+export const isZeroValue = (
+  value: number | null | undefined,
+  instrumentType?: string
+): boolean => {
+  if (value === null || value === undefined || !Number.isFinite(value)) return true;
+  return applyZeroDeadband(value, instrumentType) === 0;
+};
+

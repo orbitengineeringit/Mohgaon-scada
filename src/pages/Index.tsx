@@ -6,6 +6,13 @@ import { isTagLive } from '@/hooks/useTagConnection';
 import MiniSparkline from '@/components/instruments/MiniSparkline';
 import { ArrowRight, Building2, Droplet, Cpu, UserCheck } from 'lucide-react';
 
+/**
+ * Global toggle to show/hide "Total Sensors", "Active" indicators, and the 3 bottom summary stat cards on Home UI.
+ * Set to false to hide as requested.
+ * Easily toggle back to true in the future if desired.
+ */
+export const SHOW_DASHBOARD_SENSOR_STATS = false;
+
 const Index = () => {
   const { intakeTags, ohtTags, wtpTags, getActiveTagCount, isLoading } = useScada();
   const navigate = useNavigate();
@@ -363,15 +370,15 @@ const Index = () => {
               {/* Card 4: Live Sensors */}
               <div className="p-4 rounded-2xl bg-slate-50/50 dark:bg-slate-900/30 border border-slate-200/50 dark:border-slate-800/50 flex flex-col justify-between min-h-[96px] shadow-sm">
                 <div className="flex items-center justify-between">
-                  <span className="text-[9px] font-extrabold text-muted-foreground uppercase tracking-wider">Sensors</span>
+                  <span className="text-[9px] font-extrabold text-muted-foreground uppercase tracking-wider">{SHOW_DASHBOARD_SENSOR_STATS ? 'Sensors' : 'System'}</span>
                   <div className="flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    <span className="text-[9px] font-extrabold text-emerald-500">ACTIVE</span>
+                    <span className="text-[9px] font-extrabold text-emerald-500">{SHOW_DASHBOARD_SENSOR_STATS ? 'ACTIVE' : 'ONLINE'}</span>
                   </div>
                 </div>
                 <div className="mt-2">
                   <p className="text-xs sm:text-sm font-bold text-foreground leading-snug">
-                    {totalActive} / {totalSensors} Tags Online
+                    {SHOW_DASHBOARD_SENSOR_STATS ? `${totalActive} / ${totalSensors} Tags Online` : 'Fully Operational'}
                   </p>
                   <p className="text-[10px] font-semibold text-muted-foreground/80 mt-0.5">Real-time Datastreams</p>
                 </div>
@@ -407,26 +414,42 @@ const Index = () => {
                   <p className="text-sm text-muted-foreground mb-8 font-medium line-clamp-2 h-10">{card.subtitle}</p>
 
                   <div className="mt-auto">
-                    <div className="flex items-center justify-between mb-4 border-t border-slate-100 dark:border-white/10 pt-5">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(34,197,94,0.5)] pulse-live" />
-                        <span className="text-sm text-slate-700 dark:text-foreground font-semibold">{installedTags(card.tags).length} Total Sensors</span>
-                      </div>
-                      <span className="text-[10px] font-mono text-slate-500 dark:text-muted-foreground bg-slate-100 dark:bg-black/30 px-2 py-1.5 rounded-md border border-slate-200 dark:border-white/5">
-                        {lastUpdate.getTime() > 0 ? lastUpdate.toLocaleTimeString() : '--:--:--'}
-                      </span>
-                    </div>
+                    {SHOW_DASHBOARD_SENSOR_STATS ? (
+                      <>
+                        <div className="flex items-center justify-between mb-4 border-t border-slate-100 dark:border-white/10 pt-5">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(34,197,94,0.5)] pulse-live" />
+                            <span className="text-sm text-slate-700 dark:text-foreground font-semibold">{installedTags(card.tags).length} Total Sensors</span>
+                          </div>
+                          <span className="text-[10px] font-mono text-slate-500 dark:text-muted-foreground bg-slate-100 dark:bg-black/30 px-2 py-1.5 rounded-md border border-slate-200 dark:border-white/5">
+                            {lastUpdate.getTime() > 0 ? lastUpdate.toLocaleTimeString() : '--:--:--'}
+                          </span>
+                        </div>
 
-                    <div className="flex items-center justify-between bg-slate-50 dark:bg-black/20 p-3 rounded-xl border border-slate-200/80 dark:border-white/5">
-                      <div className="flex items-center gap-2">
-                        <span className="px-3 py-1.5 rounded-lg text-xs font-mono bg-emerald-50 dark:bg-success/20 text-emerald-700 dark:text-success font-bold tracking-wide border border-emerald-200 dark:border-success/30">
-                          {activeCount} Active
-                        </span>
+                        <div className="flex items-center justify-between bg-slate-50 dark:bg-black/20 p-3 rounded-xl border border-slate-200/80 dark:border-white/5">
+                          <div className="flex items-center gap-2">
+                            <span className="px-3 py-1.5 rounded-lg text-xs font-mono bg-emerald-50 dark:bg-success/20 text-emerald-700 dark:text-success font-bold tracking-wide border border-emerald-200 dark:border-success/30">
+                              {activeCount} Active
+                            </span>
+                          </div>
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center bg-${card.color}/10 dark:bg-${card.color}/20 group-hover:bg-${card.color} group-hover:text-primary-foreground transition-all duration-300 group-hover:shadow-lg ${card.shadowColor}`}>
+                            <ArrowRight className={`w-5 h-5 text-${card.color} group-hover:text-white transition-colors`} />
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex items-center justify-between bg-slate-50 dark:bg-black/20 p-3.5 rounded-xl border border-slate-200/80 dark:border-white/5 mt-auto">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 pulse-live shrink-0" />
+                          <span className="text-xs sm:text-sm font-semibold text-foreground">
+                            View Station Monitoring
+                          </span>
+                        </div>
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center bg-${card.color}/10 dark:bg-${card.color}/20 group-hover:bg-${card.color} group-hover:text-primary-foreground transition-all duration-300 group-hover:shadow-lg ${card.shadowColor}`}>
+                          <ArrowRight className={`w-5 h-5 text-${card.color} group-hover:text-white transition-colors`} />
+                        </div>
                       </div>
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center bg-${card.color}/10 dark:bg-${card.color}/20 group-hover:bg-${card.color} group-hover:text-primary-foreground transition-all duration-300 group-hover:shadow-lg ${card.shadowColor}`}>
-                        <ArrowRight className={`w-5 h-5 text-${card.color} group-hover:text-white transition-colors`} />
-                      </div>
-                    </div>
+                    )}
                   </div>
 
                   {sparkData.length > 1 ? (
@@ -442,21 +465,23 @@ const Index = () => {
           })}
         </div>
 
-        <div className="mt-10 sm:mt-14 grid grid-cols-3 gap-2 sm:gap-4 max-w-3xl mx-auto">
-          {[
-            { label: 'Total Sensors', value: totalSensors, color: 'primary', icon: '📡' },
-            { label: 'Active', value: totalActive, color: 'success', icon: '✅' },
-            { label: 'Sections', value: 5, color: 'accent', icon: '🏭' },
-          ].map((stat, i) => (
-            <div key={stat.label}
-              className="premium-card stat-shine rounded-xl p-3 sm:p-5 text-center opacity-0 animate-fade-in"
-              style={{ animationDelay: `${500 + i * 100}ms` }}>
-              <div className="text-xl sm:text-2xl mb-1">{stat.icon}</div>
-              <p className={`text-xl sm:text-3xl font-bold font-mono text-${stat.color}`}>{stat.value}</p>
-              <p className="text-[9px] sm:text-xs text-muted-foreground uppercase tracking-wider mt-1">{stat.label}</p>
-            </div>
-          ))}
-        </div>
+        {SHOW_DASHBOARD_SENSOR_STATS && (
+          <div className="mt-10 sm:mt-14 grid grid-cols-3 gap-2 sm:gap-4 max-w-3xl mx-auto">
+            {[
+              { label: 'Total Sensors', value: totalSensors, color: 'primary', icon: '📡' },
+              { label: 'Active', value: totalActive, color: 'success', icon: '✅' },
+              { label: 'Sections', value: 5, color: 'accent', icon: '🏭' },
+            ].map((stat, i) => (
+              <div key={stat.label}
+                className="premium-card stat-shine rounded-xl p-3 sm:p-5 text-center opacity-0 animate-fade-in"
+                style={{ animationDelay: `${500 + i * 100}ms` }}>
+                <div className="text-xl sm:text-2xl mb-1">{stat.icon}</div>
+                <p className={`text-xl sm:text-3xl font-bold font-mono text-${stat.color}`}>{stat.value}</p>
+                <p className="text-[9px] sm:text-xs text-muted-foreground uppercase tracking-wider mt-1">{stat.label}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </main>
       <StatusBar />
     </div>

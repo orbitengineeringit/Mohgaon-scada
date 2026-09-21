@@ -536,7 +536,7 @@ const InlineHTPump: React.FC<{ x: number; y: number; w: number; h: number; isRun
 // MAIN WTP PROCESS SIMULATION
 // ────────────────────────────────────────────────────────────
 const WtpProcessSimulation: React.FC = () => {
-  const { wtpTags } = useScada();
+  const { wtpTags, intakeTags } = useScada();
   const findTag = (id: string) => wtpTags.find(t => t.id === id);
 
   // Extract tag values
@@ -577,9 +577,41 @@ const WtpProcessSimulation: React.FC = () => {
     return 0;
   }, [headerPtVal, pump1On, pump2On, pt1Val, pt2Val]);
 
-  // Cross-logic
-  const waterFlowing = flowInVal > 0.1;
-  const chlorinationOn = waterFlowing || anyPumpOn || ltCwVal > 5;
+  // ─── ADVANCED 5-POINT MULTI-LEVEL VERIFICATION MATRIX ───
+  // Point 1: Source Sump Water Level (INT-LT > 5%)
+  const intakeLtVal = intakeTags.find(t => t.id === 'INT-LT')?.value ?? 0;
+  const isSourceWaterAvailable = intakeLtVal > 5.0;
+
+  // Point 2: Source Pumps Running & Head Pressure (INT-PT1/2/3, Digital States)
+  const intakePt1Val = intakeTags.find(t => t.id === 'INT-PT1')?.value ?? 0;
+  const intakePt2Val = intakeTags.find(t => t.id === 'INT-PT2')?.value ?? 0;
+  const intakeHeaderPtVal = intakeTags.find(t => t.id === 'INT-CombinedPT')?.value ?? 0;
+  const intakePump1Tag = intakeTags.find(t => t.id === 'INT-Pump1');
+  const intakePump2Tag = intakeTags.find(t => t.id === 'INT-Pump2');
+  const pump1Pumping = intakePt1Val > 1.2 || (intakePump1Tag?.value === 1 && intakePt1Val > 0.3);
+  const pump2Pumping = intakePt2Val > 1.2 || (intakePump2Tag?.value === 1 && intakePt2Val > 0.3);
+  const headerPressurized = intakeHeaderPtVal > 1.2;
+  const isSourcePumping = pump1Pumping || pump2Pumping || headerPressurized;
+
+  // Point 3: Source Transmission Discharge Flow (INT-Flow >= 1.5 m³/h)
+  const intakeFlowVal = intakeTags.find(t => t.id === 'INT-Flow')?.value ?? 0;
+  const isIntakeDischarging = intakeFlowVal >= 1.5;
+
+  // Point 4: Receiving Plant Inflow Registration (WTP-Flow-IN >= 1.5 m³/h)
+  const isWtpInflowRegistered = flowInVal >= 1.5;
+
+  // Multi-tier Verification & Confidence Consensus:
+  // Tier 1 (Full Consensus): Source pumping + Intake flow + WTP flow all verified
+  const isTier1FullConsensus = isSourcePumping && isIntakeDischarging && isWtpInflowRegistered;
+  // Tier 2 (Hydraulic Lock): Source pumping + WTP flow verified
+  const isTier2HydraulicLock = isSourcePumping && isWtpInflowRegistered;
+  // Tier 3 (Direct High-Flow): WTP inlet flow >= 5.0 m³/h (in case Intake packet is delayed)
+  const isTier3DirectFlow = flowInVal >= 5.0;
+
+  // Plant raw water inflow verified (controls animations & stage activation in background):
+  const isRawWaterActive = isTier1FullConsensus || isTier2HydraulicLock || isTier3DirectFlow;
+  const waterFlowing = isRawWaterActive;
+  const chlorinationOn = (waterFlowing || anyPumpOn) && ltCwVal > 0.05;
 
   // Visual Constants
   const pBody = 'hsl(220 60% 42%)';
@@ -690,7 +722,7 @@ const WtpProcessSimulation: React.FC = () => {
   };
 
   const drawWaterFlow = (d: string, flow: number, active: boolean = true) => {
-    if (!active || flow <= 0.05) return null;
+    if (!active || flow < 1.0) return null;
     const pNorm = Math.min(1, Math.max(0.1, flow / 100));
     const durFast = (2.4 - pNorm * 1.6).toFixed(2) + 's';
     const durSlow = (3.6 - pNorm * 2.0).toFixed(2) + 's';
@@ -836,7 +868,7 @@ const WtpProcessSimulation: React.FC = () => {
 
           {/* Main inlet pipe - continuous from left edge (rounded for symmetry) */}
           {drawPipe(`M -430 ${inletPipeY} L ${mixerX - 50} ${inletPipeY} Q ${mixerX - 25} ${inletPipeY} ${mixerX - 25} ${inletPipeY + 25} L ${mixerX - 25} ${processY + 120 - 25} Q ${mixerX - 25} ${processY + 120} ${mixerX} ${processY + 120}`, pipeW, true)}
-          {drawWaterFlow(`M -430 ${inletPipeY} L ${mixerX - 50} ${inletPipeY} Q ${mixerX - 25} ${inletPipeY} ${mixerX - 25} ${inletPipeY + 25} L ${mixerX - 25} ${processY + 120 - 25} Q ${mixerX - 25} ${processY + 120} ${mixerX} ${processY + 120}`, flowInVal, flowInVal > 0)}
+          {drawWaterFlow(`M -430 ${inletPipeY} L ${mixerX - 50} ${inletPipeY} Q ${mixerX - 25} ${inletPipeY} ${mixerX - 25} ${inletPipeY + 25} L ${mixerX - 25} ${processY + 120 - 25} Q ${mixerX - 25} ${processY + 120} ${mixerX} ${processY + 120}`, flowInVal, isRawWaterActive)}
 
           {/* EFM IN */}
           {(() => {
@@ -1016,7 +1048,7 @@ const WtpProcessSimulation: React.FC = () => {
 
           {/* Pipe: Mixer → Flocculator (properly connected boundary to boundary) */}
           {drawPipe(`M ${mixerX + mixerW} ${processY + 120} L ${flocX} ${processY + 120}`, pipeW, false)}
-          {drawWaterFlow(`M ${mixerX + mixerW} ${processY + 120} L ${flocX} ${processY + 120}`, flowInVal, flowInVal > 0)}
+          {drawWaterFlow(`M ${mixerX + mixerW} ${processY + 120} L ${flocX} ${processY + 120}`, flowInVal, isRawWaterActive)}
         </g>
 
         {/* ═══ SECTION 3: CLARIFLOCCULATOR ═══ */}
@@ -1136,7 +1168,7 @@ const WtpProcessSimulation: React.FC = () => {
           <StatusBadge x={flocX + flocW / 2} y={processY + flocH + 78} isOn={waterFlowing} />
           {/* Pipe: Floc → Settling (properly connected boundary to boundary) */}
           {drawPipe(`M ${flocX + flocW} ${processY + 120} L ${settleX} ${processY + 120}`, pipeW, false)}
-          {drawWaterFlow(`M ${flocX + flocW} ${processY + 120} L ${settleX} ${processY + 120}`, flowInVal, flowInVal > 0)}
+          {drawWaterFlow(`M ${flocX + flocW} ${processY + 120} L ${settleX} ${processY + 120}`, flowInVal, isRawWaterActive)}
         </g>
 
         {/* ═══ SECTION 4: SETTLING TANK ═══ */}
@@ -1217,7 +1249,7 @@ const WtpProcessSimulation: React.FC = () => {
           <StatusBadge x={settleX + settleW / 2} y={processY + settleH + 96} isOn={waterFlowing} />
           {/* Pipe: Settling → Filters (properly connected boundary to boundary) */}
           {drawPipe(`M ${settleX + settleW} ${processY + 120} L ${filterX} ${processY + 120}`, pipeW, false)}
-          {drawWaterFlow(`M ${settleX + settleW} ${processY + 120} L ${filterX} ${processY + 120}`, flowInVal, flowInVal > 0)}
+          {drawWaterFlow(`M ${settleX + settleW} ${processY + 120} L ${filterX} ${processY + 120}`, flowInVal, isRawWaterActive)}
         </g>
 
         {/* ═══ SECTION 5: RAPID SAND FILTERS + BACKWASH TANK ═══ */}
@@ -1339,7 +1371,7 @@ const WtpProcessSimulation: React.FC = () => {
           {/* Inflow Pipe: Filter → Chlorination → CWR (Drawn with rounded end for consistency) */}
           {drawPipe(filterToCwrPath, pipeW, true)}
           {drawWaterColumn(filterToCwrPath, pipeW)}
-          {drawWaterFlow(filterToCwrPath, flowInVal, flowInVal > 0)}
+          {drawWaterFlow(filterToCwrPath, flowInVal, isRawWaterActive)}
 
           <rect x={cwrX} y={cwrY} width={cwrW} height={cwrH} rx={4}
             fill="url(#wtp-concrete)" stroke="#334155" strokeWidth="2.5" />
@@ -1528,7 +1560,7 @@ const WtpProcessSimulation: React.FC = () => {
                 <ellipse cx={headerStartX} cy={hCY} rx={3} ry={hPW / 2 + 2} fill={pVDark} opacity="0.7" />
 
                 {/* Water flow segmented cleanly to avoid overlaps */}
-                {headerPumpsOn && drawWaterFlow(mainFlow, flowOutVal || 50, true)}
+                {headerPumpsOn && drawWaterFlow(mainFlow, flowOutVal >= 1.0 ? flowOutVal : 50, true)}
 
                 {/* Header label - below header */}
                 <rect x={635 - 75} y={hCY + hPW / 2 + 8} width={150} height={18} rx={4} fill="hsl(var(--background))" opacity="0.9" />

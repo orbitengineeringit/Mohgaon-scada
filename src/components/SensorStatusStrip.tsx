@@ -7,12 +7,23 @@ interface SensorStatusStripProps {
   sensorIds: string[];
   /** Optional label override per sensor id */
   labels?: Record<string, string>;
+  /** Optional manual visibility override */
+  visible?: boolean;
 }
+
+/**
+ * Global toggle for sensor status indicator strip across SCADA (Intake, WTP, OHT).
+ * Currently set to false to hide from UI as requested.
+ * Set to true whenever you wish to show it again in the future.
+ */
+export const SHOW_SENSOR_STATUS_STRIP = false;
 
 /**
  * Compact horizontal strip showing ON/OFF/ZERO status for each listed sensor.
  */
-const SensorStatusStrip: React.FC<SensorStatusStripProps> = ({ tags, sensorIds, labels }) => {
+const SensorStatusStrip: React.FC<SensorStatusStripProps> = ({ tags, sensorIds, labels, visible = SHOW_SENSOR_STATUS_STRIP }) => {
+  if (!visible) return null;
+
   const items = sensorIds.map(id => {
     const tag = tags.find(t => t.id === id);
     const connection = getTagConnection(tag);

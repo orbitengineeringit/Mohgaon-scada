@@ -1,7 +1,6 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { MohgaonSensor } from '@/config/mohgaonSensors';
 import SensorStatusStrip from './SensorStatusStrip';
-import { useScada } from '@/contexts/ScadaContext';
 
 interface CircularGaugeProps {
   cx: number;
@@ -105,7 +104,6 @@ export interface OhtProcessSimulationProps {
 }
 
 const OhtProcessSimulation: React.FC<OhtProcessSimulationProps> = ({ sensors, tags, config }) => {
-  const { setOhtTags } = useScada();
   const getSensor = (key: string) => sensors.find(s => 
     s.mqttKey === key || 
     s.mqttKey.endsWith(`_${key}`) || 
@@ -124,15 +122,8 @@ const OhtProcessSimulation: React.FC<OhtProcessSimulationProps> = ({ sensors, ta
   const ltVal = ltTag?.value || 0;
 
   const ptTag = getTag('PT_01');
-
   const fInTag = getTag('FLOW');
-
   const fOutTag = getTag('FLOW_OUT');
-
-  const fcvTag = getTag('FCV');
-  const hasFcvSensor = sensors.some(s => s.instrumentType === 'fcv' && !s.notInstalled);
-  const fcvVal = fcvTag?.value || 0;
-  const fcvOpen = fcvVal > 0;
 
   const totalizerSensor = sensors.find(s => s.instrumentType === 'totalizer');
   const totTag = totalizerSensor ? tags.find(t => t.id === totalizerSensor.id) : null;
@@ -141,17 +132,33 @@ const OhtProcessSimulation: React.FC<OhtProcessSimulationProps> = ({ sensors, ta
   const fInVal = fInTag?.value || 0;
   const totVal = totTag?.value || 0;
 
-  const handleFcvToggle = () => {
-    const fcvSensor = sensors.find(s => s.instrumentType === 'fcv');
-    if (!fcvSensor) return;
-    setOhtTags(prev => prev.map(t => {
-      if (t.id === fcvSensor.id) {
-        const newValue = t.value > 0 ? 0 : 100;
-        return { ...t, value: newValue, timestamp: new Date() };
-      }
-      return t;
-    }));
-  };
+  // Multi-Level Automated Logic for FCV (Flow Control Valve):
+  // Level 1: Pressure threshold (PT >= 1.5 Bar)
+  const isPressurized = ptVal >= 1.5;
+  // Level 2: Active flow confirmation (Flow > 0.3 m³/h)
+  const hasFlow = fInVal > 0.3;
+
+  // Track tank level trend to confirm actual filling even if flow meter is not yet online
+  const prevLtRef = useRef(ltVal);
+  const [isFilling, setIsFilling] = useState(false);
+
+  useEffect(() => {
+    if (ltVal > prevLtRef.current + 0.05) {
+      setIsFilling(true);
+    } else if (ltVal < prevLtRef.current - 0.1) {
+      setIsFilling(false);
+    }
+    prevLtRef.current = ltVal;
+  }, [ltVal]);
+
+  // FCV opens automatically when inlet line is pressurized (PT >= 1.5 Bar) or flow is present
+  const fcvOpen = isPressurized || hasFlow;
+
+  // Multi-level status confirmation:
+  // Confirmed: PT >= 1.5 and water is actively verified entering the tank (flow > 0.3 or tank filling)
+  const isFlowConfirmed = isPressurized && (hasFlow || isFilling);
+  // Stagnant / Unconfirmed: PT >= 1.5 but flow is 0 and level is not rising
+  const isUnconfirmedPressure = isPressurized && !hasFlow && !isFilling;
 
   // Visual constants matching IntakeProcessSimulation
   const pBody = "hsl(220 60% 42%)";
@@ -207,10 +214,12 @@ const OhtProcessSimulation: React.FC<OhtProcessSimulationProps> = ({ sensors, ta
   // Center column (shaft)
   const shaftW = 80;
 
-  // Inlet Pipe (comes from extreme left ground, travels up to top of tank)
+  // Inlet Pipe (comes from extreme left ground, passes through Flow Meter, FCV, PT Inlet, and up to top of tank)
+  const fcvX = 480;
+  const ptX = 665;
   const inPipeX = tcx - shaftW / 2 + 15;
-  const inPipeBeforeFcv = `M 10 ${pillarY + pillarH} L 660 ${pillarY + pillarH}`;
-  const inPipeAfterFcv = `M 660 ${pillarY + pillarH} L ${inPipeX} ${pillarY + pillarH} L ${inPipeX} ${ty}`;
+  const inPipeBeforeFcv = `M 10 ${pillarY + pillarH} L ${fcvX - 25} ${pillarY + pillarH}`;
+  const inPipeAfterFcv = `M ${fcvX + 25} ${pillarY + pillarH} L ${inPipeX} ${pillarY + pillarH} L ${inPipeX} ${ty}`;
   const outPipeX = tcx + shaftW / 2 - 15;
   const outPipePath = `M ${outPipeX} ${ty + th} L ${outPipeX} ${pillarY + pillarH} L ${svgW - 10} ${pillarY + pillarH}`;
 
@@ -302,13 +311,13 @@ const OhtProcessSimulation: React.FC<OhtProcessSimulationProps> = ({ sensors, ta
           {/* Inlet Pipe before FCV */}
           <g>
             {drawPipe(inPipeBeforeFcv, pipeW)}
-            {drawWaterFlow(inPipeBeforeFcv, fInVal, fInVal > 0)}
+            {(isPressurized || fInVal > 0) && drawWaterFlow(inPipeBeforeFcv, Math.max(fInVal, isPressurized ? 15 : 0), true)}
           </g>
 
           {/* Inlet Pipe after FCV */}
           <g>
             {drawPipe(inPipeAfterFcv, pipeW)}
-            {(!hasFcvSensor || fcvOpen) && drawWaterFlow(inPipeAfterFcv, fInVal, fInVal > 0)}
+            {fcvOpen && (fInVal > 0 || isFlowConfirmed) && drawWaterFlow(inPipeAfterFcv, Math.max(fInVal, 15), true)}
           </g>
 
           {/* Outlet Pipe */}
@@ -445,9 +454,9 @@ const OhtProcessSimulation: React.FC<OhtProcessSimulationProps> = ({ sensors, ta
 
           {/* INSTRUMENTS */}
 
-          {/* Flow IN METER (On the inlet pipe) */}
+          {/* Flow IN METER (On the inlet pipe - Left side) */}
           {(() => {
-            const efmX = 300;
+            const efmX = 280;
             const efmY = pillarY + pillarH;
             const hTop = efmY - 120;
             const hW = 110, hH = 65, nW = 28;
@@ -480,80 +489,190 @@ const OhtProcessSimulation: React.FC<OhtProcessSimulationProps> = ({ sensors, ta
             );
           })()}
 
-          {/* Pressure Meter on Inlet (PT) - Left side on inlet pipe */}
+          {/* Flow Control Valve (FCV) - Center between Flow IN and PT Inlet */}
+          {(() => {
+            const efmY = pillarY + pillarH;
+            return (
+              <g className="select-none">
+                {/* Header Text above Actuator */}
+                <text x={fcvX} y={efmY - 138} textAnchor="middle" fontSize="18" fontWeight="900" fill="hsl(var(--foreground))" letterSpacing="0.5px">FCV</text>
+                <text x={fcvX} y={efmY - 122} textAnchor="middle" fontSize="11" fontWeight="700" fill="hsl(var(--muted-foreground))" letterSpacing="0.5px">AUTOMATED VALVE</text>
+
+                {/* Actuator Housing (Motorized Head) */}
+                <rect x={fcvX - 26} y={efmY - 114} width="52" height="34" rx="6" fill="hsl(var(--card))" stroke="hsl(var(--border))" strokeWidth="1.5" />
+                <rect x={fcvX - 22} y={efmY - 110} width="44" height="12" rx="3" fill="hsl(var(--secondary))" />
+
+                {/* Actuator Status Beacon Light */}
+                <circle cx={fcvX + 15} cy={efmY - 104} r="4"
+                  fill={isFlowConfirmed ? 'hsl(var(--success))' : isUnconfirmedPressure ? 'hsl(var(--warning))' : fcvOpen ? 'hsl(199 89% 48%)' : 'hsl(var(--destructive))'}
+                  className={fcvOpen ? 'animate-pulse' : ''}
+                />
+
+                {/* Position Display on Actuator */}
+                <text x={fcvX - 4} y={efmY - 101} textAnchor="middle" fontSize="9" fontWeight="900" fontFamily="ui-monospace, monospace"
+                  fill={fcvOpen ? 'hsl(var(--success))' : 'hsl(var(--muted-foreground))'}>
+                  {fcvOpen ? '100%' : '0%'}
+                </text>
+
+                {/* Actuator Handwheel / Rotation Indicator */}
+                <g style={{
+                  transform: fcvOpen ? `rotate(180deg)` : `rotate(0deg)`,
+                  transformOrigin: `${fcvX}px ${efmY - 65}px`,
+                  transition: "transform 0.8s cubic-bezier(0.4, 0, 0.2, 1)"
+                }}>
+                  <circle cx={fcvX} cy={efmY - 65} r="18" fill="none" stroke="hsl(var(--muted-foreground))" strokeWidth="2.5" />
+                  <circle cx={fcvX} cy={efmY - 65} r="9" fill="none" stroke="hsl(var(--muted-foreground))" strokeWidth="1" strokeDasharray="3 3" />
+                  <line x1={fcvX} y1={efmY - 83} x2={fcvX} y2={efmY - 47} stroke="hsl(var(--muted-foreground))" strokeWidth="2" />
+                  <line x1={fcvX - 18} y1={efmY - 65} x2={fcvX + 18} y2={efmY - 65} stroke="hsl(var(--muted-foreground))" strokeWidth="2" />
+                  <circle cx={fcvX} cy={efmY - 65} r="4" fill="hsl(var(--muted-foreground))" />
+                </g>
+
+                {/* Valve Stem (Connecting actuator to valve body) */}
+                <line x1={fcvX} y1={efmY - 65} x2={fcvX} y2={efmY - 20} stroke="hsl(var(--muted-foreground))" strokeWidth="4" strokeLinecap="round" />
+
+                {/* Valve Bonnet & Packing Gland */}
+                <rect x={fcvX - 14} y={efmY - 24} width="28" height="6" rx="2" fill="#64748b" stroke="#475569" strokeWidth="1" />
+
+                {/* Valve Gate Chamber / Body Background */}
+                <rect x={fcvX - 25} y={efmY - 20} width="50" height="40" rx="6" fill="hsl(var(--card))" stroke="hsl(var(--border))" strokeWidth="1.5" />
+
+                {/* Internal Flow Aperture (shows water passage) */}
+                <rect x={fcvX - 18} y={efmY - 11} width="36" height="22" rx="3" fill="hsl(199 89% 48% / 0.15)" stroke="hsl(199 89% 48% / 0.3)" strokeWidth="1" />
+
+                {/* Sliding Gate Wedge (Physically moves up when open, down when closed) */}
+                <rect
+                  x={fcvX - 16}
+                  y={fcvOpen ? efmY - 32 : efmY - 10}
+                  width="32"
+                  height="20"
+                  rx="2"
+                  fill={fcvOpen ? 'hsl(var(--success) / 0.15)' : 'hsl(var(--destructive) / 0.25)'}
+                  stroke={fcvOpen ? 'hsl(var(--success))' : 'hsl(var(--destructive))'}
+                  strokeWidth="2"
+                  style={{
+                    transition: "y 0.8s cubic-bezier(0.4, 0, 0.2, 1), fill 0.8s, stroke 0.8s",
+                    opacity: fcvOpen ? 0.2 : 0.95
+                  }}
+                />
+
+                {/* Pipe Connection Flanges (Left and Right) */}
+                <rect x={fcvX - 27} y={efmY - 16} width="5" height="32" rx="1.5" fill="#475569" stroke="#334155" strokeWidth="1" />
+                <rect x={fcvX + 22} y={efmY - 16} width="5" height="32" rx="1.5" fill="#475569" stroke="#334155" strokeWidth="1" />
+
+                {/* Valve Gate Symbol Triangles */}
+                <path d={`M ${fcvX - 22} ${efmY - 14} L ${fcvX - 22} ${efmY + 14} L ${fcvX} ${efmY} Z`} fill="none" stroke="hsl(var(--muted-foreground))" strokeWidth="2" strokeLinejoin="round" />
+                <path d={`M ${fcvX + 22} ${efmY - 14} L ${fcvX + 22} ${efmY + 14} L ${fcvX} ${efmY} Z`} fill="none" stroke="hsl(var(--muted-foreground))" strokeWidth="2" strokeLinejoin="round" />
+                <circle cx={fcvX} cy={efmY} r="4" fill="hsl(var(--muted-foreground))" />
+
+                {/* Multi-Level Status Card Below Pipe */}
+                <g>
+                  <rect
+                    x={fcvX - 95}
+                    y={efmY + 40}
+                    width={190}
+                    height={95}
+                    rx={12}
+                    fill={
+                      isFlowConfirmed ? 'hsl(142 71% 45% / 0.08)' :
+                      isUnconfirmedPressure ? 'hsl(38 92% 50% / 0.08)' :
+                      fcvOpen ? 'hsl(199 89% 48% / 0.08)' :
+                      'hsl(var(--card))'
+                    }
+                    stroke={
+                      isFlowConfirmed ? 'hsl(142 71% 45% / 0.6)' :
+                      isUnconfirmedPressure ? 'hsl(38 92% 50% / 0.6)' :
+                      fcvOpen ? 'hsl(199 89% 48% / 0.6)' :
+                      'hsl(var(--border))'
+                    }
+                    strokeWidth="1.5"
+                    style={{ filter: 'drop-shadow(0 6px 10px rgba(0,0,0,0.12))' }}
+                  />
+
+                  {/* Title */}
+                  <text x={fcvX} y={efmY + 61} textAnchor="middle" fontSize="13" fontWeight="800"
+                    fill={
+                      isFlowConfirmed ? 'hsl(142 71% 45%)' :
+                      isUnconfirmedPressure ? 'hsl(38 92% 50%)' :
+                      fcvOpen ? 'hsl(199 89% 55%)' :
+                      'hsl(var(--muted-foreground))'
+                    }
+                    letterSpacing="1px">
+                    FLOW VALVE (FCV)
+                  </text>
+
+                  {/* Position Readout */}
+                  <text x={fcvX} y={efmY + 87} textAnchor="middle" fontSize="24" fontWeight="900" fontFamily="ui-monospace"
+                    fill={
+                      isFlowConfirmed ? 'hsl(var(--success))' :
+                      isUnconfirmedPressure ? 'hsl(var(--warning))' :
+                      fcvOpen ? 'hsl(199 89% 55%)' :
+                      'hsl(var(--muted-foreground))'
+                    }>
+                    {fcvOpen ? 'OPEN 100%' : 'CLOSED 0%'}
+                  </text>
+
+                  {/* Multi-Level Status Pill */}
+                  <g>
+                    <rect
+                      x={fcvX - 85}
+                      y={efmY + 98}
+                      width={170}
+                      height={26}
+                      rx={6}
+                      fill={
+                        isFlowConfirmed ? 'hsl(142 71% 45% / 0.15)' :
+                        isUnconfirmedPressure ? 'hsl(38 92% 50% / 0.15)' :
+                        fcvOpen ? 'hsl(199 89% 48% / 0.15)' :
+                        'hsl(var(--secondary))'
+                      }
+                    />
+                    <circle
+                      cx={fcvX - 74}
+                      cy={efmY + 111}
+                      r="3.5"
+                      fill={
+                        isFlowConfirmed ? 'hsl(var(--success))' :
+                        isUnconfirmedPressure ? 'hsl(var(--warning))' :
+                        fcvOpen ? 'hsl(199 89% 55%)' :
+                        'hsl(var(--destructive))'
+                      }
+                      className={fcvOpen ? 'animate-pulse' : ''}
+                    />
+                    <text
+                      x={fcvX + 4}
+                      y={efmY + 115}
+                      textAnchor="middle"
+                      fontSize="10"
+                      fontWeight="800"
+                      fontFamily="ui-monospace, monospace"
+                      letterSpacing="0.4px"
+                      fill={
+                        isFlowConfirmed ? 'hsl(var(--success))' :
+                        isUnconfirmedPressure ? 'hsl(var(--warning))' :
+                        fcvOpen ? 'hsl(199 89% 55%)' :
+                        'hsl(var(--muted-foreground))'
+                      }
+                    >
+                      {isFlowConfirmed
+                        ? 'INFLOW CONFIRMED'
+                        : isUnconfirmedPressure
+                        ? 'CHARGED • AWAITING FLOW'
+                        : fcvOpen
+                        ? 'FLOW DETECTED'
+                        : 'INLET DEPRESSURIZED'}
+                    </text>
+                  </g>
+                </g>
+              </g>
+            );
+          })()}
+
+          {/* Pressure Meter on Inlet (PT) - Right side before OHT pillar */}
           <g>
-            <path d={`M 500 ${pillarY + pillarH} L 500 ${pillarY + pillarH - 40}`} fill="none" stroke="#475569" strokeWidth="6" />
-            <circle cx={500} cy={pillarY + pillarH} r="6" fill="#475569" />
-            <CircularGauge cx={500} cy={pillarY + pillarH - 100} r={55} value={ptVal} min={0} max={ptTag?.max ?? 10} label="PT Inlet" unit="Bar" />
+            <path d={`M ${ptX} ${pillarY + pillarH} L ${ptX} ${pillarY + pillarH - 40}`} fill="none" stroke="#475569" strokeWidth="6" />
+            <circle cx={ptX} cy={pillarY + pillarH} r="6" fill="#475569" />
+            <CircularGauge cx={ptX} cy={pillarY + pillarH - 100} r={55} value={ptVal} min={0} max={ptTag?.max ?? 10} label="PT Inlet" unit="Bar" />
           </g>
-
-          {/* Flow Control Valve (FCV) on Inlet Pipe - Right side of PT Inlet */}
-          {hasFcvSensor && <g cursor="pointer" onClick={handleFcvToggle} className="select-none">
-            {/* Label */}
-            <text x={660} y={305} textAnchor="middle" className="fill-foreground font-bold text-sm" letterSpacing="0.5px">FCV</text>
-            <text x={660} y={320} textAnchor="middle" className="fill-muted-foreground font-medium text-[11px]">Flow Control Valve</text>
-
-            {/* Stem and Handwheel group with spin rotation transition */}
-            <g style={{
-              transform: fcvOpen ? "rotate(180deg)" : "rotate(0deg)",
-              transformOrigin: "660px 360px",
-              transition: "transform 0.8s cubic-bezier(0.4, 0, 0.2, 1)"
-            }}>
-              {/* Handwheel outer wheel */}
-              <circle cx={660} cy={360} r="18" fill="none" stroke="hsl(var(--muted-foreground))" strokeWidth="3" />
-              {/* Inner details / spokes of wheel */}
-              <circle cx={660} cy={360} r="10" fill="none" stroke="hsl(var(--muted-foreground))" strokeWidth="1" strokeDasharray="3 3" />
-              <line x1={660} y1={342} x2={660} y2={378} stroke="hsl(var(--muted-foreground))" strokeWidth="2.5" />
-              <line x1={642} y1={360} x2={678} y2={360} stroke="hsl(var(--muted-foreground))" strokeWidth="2.5" />
-              <circle cx={660} cy={360} r="4" fill="hsl(var(--muted-foreground))" />
-            </g>
-
-            {/* Non-rotating stem (actuator shaft) */}
-            <line x1={660} y1={360} x2={660} y2={417} stroke="hsl(var(--muted-foreground))" strokeWidth="4.5" strokeLinecap="round" />
-
-            {/* Valve Bonnet / Flange */}
-            <path d="M 648 417 L 672 417" stroke="hsl(var(--muted-foreground))" strokeWidth="3.5" />
-
-            {/* Valve Gate Chamber / Body Background (Enlarged) */}
-            <rect x="636" y="417" width="48" height="36" fill="hsl(var(--card))" stroke="hsl(var(--border))" strokeWidth="2" rx="4" />
-
-            {/* Slide Passage (indicates open pipe flow passage in background) */}
-            <rect x="644" y="425" width="32" height="20" fill="hsl(199, 89%, 48%, 0.15)" stroke="hsl(199, 89%, 48%, 0.3)" strokeWidth="1" rx="2" />
-
-            {/* Sliding Wedge/Gate Indicator (Visibly opens and closes) */}
-            <rect 
-              x="644" 
-              y={fcvOpen ? "398" : "423"} 
-              width="32" 
-              height="24" 
-              rx="2"
-              fill={fcvOpen ? "hsl(var(--success) / 0.1)" : "hsl(var(--destructive) / 0.15)"} 
-              stroke={fcvOpen ? "hsl(var(--success))" : "hsl(var(--destructive))"} 
-              strokeWidth="2" 
-              style={{ transition: "y 0.8s cubic-bezier(0.4, 0, 0.2, 1), fill 0.8s, stroke 0.8s", opacity: fcvOpen ? 0 : 0.95 }} 
-            />
-
-            {/* Realistic Gate Valve Triangles (overlay flanges) */}
-            <path d="M 636 417 L 636 453 L 660 435 Z" fill="none" stroke="hsl(var(--muted-foreground))" strokeWidth="2.5" strokeLinejoin="round" />
-            <path d="M 684 417 L 684 453 L 660 435 Z" fill="none" stroke="hsl(var(--muted-foreground))" strokeWidth="2.5" strokeLinejoin="round" />
-            <circle cx={660} cy={435} r="5" fill="hsl(var(--muted-foreground))" />
-
-            {/* Status Badge below pipe (larger & glowing) */}
-            <g className="transition-all duration-300">
-              <rect x={660 - 50} y={464} width="100" height="28" rx="8"
-                fill={fcvOpen ? "hsl(142, 71%, 45%, 0.1)" : "hsl(0, 84%, 60%, 0.1)"}
-                stroke={fcvOpen ? "hsl(var(--success))" : "hsl(var(--destructive))"}
-                strokeWidth="1.5"
-              />
-              <circle cx={660 - 32} cy={478} r="5" fill={fcvOpen ? "hsl(var(--success))" : "hsl(var(--destructive))"} className={fcvOpen ? "animate-pulse" : ""} />
-              <text x={660 + 10} y={483} textAnchor="middle" fontSize="12" fontWeight="900" fill={fcvOpen ? "hsl(var(--success))" : "hsl(var(--destructive))"} fontFamily="ui-monospace, monospace" letterSpacing="0.5px">
-                {fcvOpen ? 'OPEN' : 'CLOSED'}
-              </text>
-            </g>
-
-            {/* Tap to Toggle Text */}
-            <text x={660} y={510} textAnchor="middle" fontSize="10" fill="hsl(var(--muted-foreground))" fontWeight="600" className="animate-pulse">Tap to toggle</text>
-          </g>}
 
         </svg>
       </div>

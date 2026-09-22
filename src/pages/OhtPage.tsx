@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useScada } from '@/contexts/ScadaContext';
 import StatusBar from '@/components/StatusBar';
@@ -48,14 +48,85 @@ const OhtTankIcon: React.FC<{ colorHsl: string; label: string }> = ({ colorHsl, 
 );
 
 const OhtSubsection: React.FC<{ config: OhtConfig; tags: any[]; viewMode: 'cards' | 'process' }> = ({ config, tags, viewMode }) => {
-  const findTag = (id: string) => tags.find((t: any) => t.id === id);
+  // Derive prefix (e.g. 'OHT1', 'OHT2', 'OHT3', 'OHT4')
+  const prefix = config.groupKey.replace('-', '').toUpperCase();
+  const ptTag = tags.find((t: any) => t.id === `${prefix}-PT`);
+  const flowTag = tags.find((t: any) => t.id === `${prefix}-Flow-IN`);
+  const ltTag = tags.find((t: any) => t.id === `${prefix}-LT`);
 
-  const sensorIds = useMemo(() => config.sensors.filter(s => !s.notInstalled).map(s => s.id), [config.sensors, config.groupKey]);
+  const ptVal = ptTag?.value || 0;
+  const flowVal = flowTag?.value || 0;
+  const ltVal = ltTag?.value || 0;
+
+  // Multi-Level Logic for Automated FCV:
+  // Level 1: Pressure threshold (PT >= 1.5 Bar)
+  const isPressurized = ptVal >= 1.5;
+  // Level 2: Active flow confirmation (Flow > 0.3 m³/h)
+  const hasFlow = flowVal > 0.3;
+
+  // Level trend tracking to confirm filling
+  const prevLtRef = useRef(ltVal);
+  const [isFilling, setIsFilling] = useState(false);
+
+  useEffect(() => {
+    if (ltVal > prevLtRef.current + 0.05) {
+      setIsFilling(true);
+    } else if (ltVal < prevLtRef.current - 0.1) {
+      setIsFilling(false);
+    }
+    prevLtRef.current = ltVal;
+  }, [ltVal]);
+
+  const fcvOpen = isPressurized || hasFlow;
+  const isFlowConfirmed = isPressurized && (hasFlow || isFilling);
+  const isUnconfirmedPressure = isPressurized && !hasFlow && !isFilling;
+
+  const fcvStatusDetail = isFlowConfirmed
+    ? 'INFLOW CONFIRMED'
+    : isUnconfirmedPressure
+    ? 'CHARGED • AWAITING FLOW'
+    : fcvOpen
+    ? 'FLOW DETECTED'
+    : 'LINE DEPRESSURIZED';
+
+  const fcvSensor: MohgaonSensor = useMemo(() => ({
+    id: `${prefix}-FCV`,
+    mqttKey: '',
+    label: 'Flow Control Valve (FCV)',
+    unit: '%',
+    min: 0,
+    max: 100,
+    section: 'oht',
+    subsection: `OHT-${config.label.replace('#', '')}`,
+    type: 'digital',
+    instrumentType: 'fcv',
+  }), [prefix, config.label]);
+
+  const fcvTag = useMemo(() => ({
+    id: `${prefix}-FCV`,
+    label: 'Flow Control Valve (FCV)',
+    value: fcvOpen ? 100 : 0,
+    unit: '%',
+    min: 0,
+    max: 100,
+    timestamp: ptTag?.timestamp || new Date(),
+    status: (isFlowConfirmed ? 'normal' : isUnconfirmedPressure ? 'warning' : 'normal') as any,
+    statusDetail: fcvStatusDetail,
+  }), [prefix, fcvOpen, isFlowConfirmed, isUnconfirmedPressure, fcvStatusDetail, ptTag?.timestamp]);
+
+  // Combine physical sensors with the automated FCV
+  const allSensors = useMemo(() => [...config.sensors, fcvSensor], [config.sensors, fcvSensor]);
+  const sensorIds = useMemo(() => allSensors.filter(s => !s.notInstalled).map(s => s.id), [allSensors]);
   const sensorMap = useMemo(() => {
     const map: Record<string, MohgaonSensor> = {};
-    config.sensors.forEach(s => { map[s.id] = s; });
+    allSensors.forEach(s => { map[s.id] = s; });
     return map;
-  }, [config.groupKey]);
+  }, [allSensors]);
+
+  const findTag = (id: string) => {
+    if (id === fcvSensor.id) return fcvTag;
+    return tags.find((t: any) => t.id === id);
+  };
 
   return (
     <div className={`mb-4 rounded-2xl border ${config.borderColor} ${config.bgColor} p-3 sm:p-4 relative overflow-hidden transition-all duration-300 hover:shadow-lg`}>
@@ -75,7 +146,7 @@ const OhtSubsection: React.FC<{ config: OhtConfig; tags: any[]; viewMode: 'cards
       </div>
 
       {viewMode === 'cards' ? (
-        <SortableCardGrid groupKey={config.groupKey} sensorIds={sensorIds} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 w-full mt-4">
+        <SortableCardGrid groupKey={config.groupKey} sensorIds={sensorIds} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 sm:gap-6 w-full mt-4">
           {(orderedIds) => orderedIds.map((id, i) => {
             const sensor = sensorMap[id];
             const tag = findTag(id);
@@ -105,25 +176,25 @@ const OhtPage: React.FC = () => {
     {
       title: 'OHT - 1 Ward No 04 - 300KL', label: '#1', color: 'bg-primary', colorHsl: '199 89% 48%',
       borderColor: 'border-primary/20', bgColor: 'bg-primary/[0.03]', iconBg: 'bg-primary/10',
-      sensors: OHT1_SENSORS, startIndex: 0, capacity: '4 instruments • Inlet PT, LT, Flow Inlet, Totalizer',
+      sensors: OHT1_SENSORS, startIndex: 0, capacity: '5 instruments • Inlet PT, LT, Flow Inlet, Totalizer, FCV (Automated)',
       groupKey: 'oht-1',
     },
     {
       title: 'OHT - 2 Ward No 06 500KL', label: '#2', color: 'bg-accent', colorHsl: '38 92% 50%',
       borderColor: 'border-accent/20', bgColor: 'bg-accent/[0.03]', iconBg: 'bg-accent/10',
-      sensors: OHT2_SENSORS, startIndex: 4, capacity: '4 instruments • Inlet PT, LT, Flow Inlet, Totalizer',
+      sensors: OHT2_SENSORS, startIndex: 5, capacity: '5 instruments • Inlet PT, LT, Flow Inlet, Totalizer, FCV (Automated)',
       groupKey: 'oht-2',
     },
     {
       title: 'OHT - 3 Ward No 06 200KL', label: '#3', color: 'bg-success', colorHsl: '142 71% 45%',
       borderColor: 'border-success/20', bgColor: 'bg-success/[0.03]', iconBg: 'bg-success/10',
-      sensors: OHT3_SENSORS, startIndex: 8, capacity: '4 instruments • Inlet PT, LT, Flow Inlet, Totalizer',
+      sensors: OHT3_SENSORS, startIndex: 10, capacity: '5 instruments • Inlet PT, LT, Flow Inlet, Totalizer, FCV (Automated)',
       groupKey: 'oht-3',
     },
     {
       title: 'OHT - 4 Ward No 10 200KL', label: '#4', color: 'bg-indigo-500', colorHsl: '271 91% 65%',
       borderColor: 'border-indigo-500/20', bgColor: 'bg-indigo-500/[0.03]', iconBg: 'bg-indigo-500/10',
-      sensors: OHT4_SENSORS, startIndex: 12, capacity: '4 instruments • Inlet PT, LT, Flow Inlet, Totalizer',
+      sensors: OHT4_SENSORS, startIndex: 15, capacity: '5 instruments • Inlet PT, LT, Flow Inlet, Totalizer, FCV (Automated)',
       groupKey: 'oht-4',
     },
   ];
@@ -149,7 +220,7 @@ const OhtPage: React.FC = () => {
             </div>
             <div className="min-w-0">
               <h2 className="text-xl leading-tight md:text-2xl font-bold text-foreground">Overhead Tanks (OHT)</h2>
-              <p className="text-sm text-muted-foreground">4 OHT units × 4 instruments each</p>
+              <p className="text-sm text-muted-foreground">4 OHT units × 5 instruments each (including Automated FCV)</p>
             </div>
           </div>
           <div className="flex w-full flex-wrap items-center gap-2 sm:gap-3 sm:w-auto sm:flex-nowrap sm:justify-end">

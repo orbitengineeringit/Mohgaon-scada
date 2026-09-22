@@ -122,40 +122,62 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
         return <TurbidityAnalyzer value={tag.value} max={tag.max} unit={tag.unit} />;
       case 'chlorine':
         return <ChlorineAnalyzer value={tag.value} max={tag.max} unit={tag.unit} />;
-      case 'fcv':
+      case 'fcv': {
         const fcvOpen = tag.value > 1;
+        const statusDetail = (tag as any).statusDetail || (fcvOpen ? 'OPEN (AUTO)' : 'CLOSED (AUTO)');
+        const isConfirmed = statusDetail.includes('CONFIRMED');
+        const isCharged = statusDetail.includes('CHARGED');
+        const strokeColor = isConfirmed
+          ? 'hsl(var(--success))'
+          : isCharged
+          ? 'hsl(var(--warning))'
+          : fcvOpen
+          ? 'hsl(var(--primary))'
+          : 'hsl(var(--muted))';
+
         return (
           <div className="text-center w-full flex flex-col items-center">
-            <div className="relative w-full max-w-[120px] aspect-square mx-auto mb-2">
+            <div className="relative w-full max-w-[120px] aspect-square mx-auto mb-1.5">
               <svg viewBox="0 0 64 64" className="w-full h-full drop-shadow-sm">
                 {/* Background track */}
                 <circle cx="32" cy="32" r="28" fill="none" stroke="hsl(var(--muted))" strokeWidth="5" />
                 {/* Active arc */}
-                <circle cx="32" cy="32" r="28" fill="none" stroke="hsl(var(--primary))" strokeWidth="5"
+                <circle cx="32" cy="32" r="28" fill="none" stroke={strokeColor} strokeWidth="5"
                   strokeDasharray={`${(tag.value / 100) * 175.93} 175.93`}
                   strokeLinecap="round" transform="rotate(-90 32 32)" className="transition-all duration-500" />
                 {/* Pulsing glow ring when valve is open */}
                 {fcvOpen && (
-                  <circle cx="32" cy="32" r="28" fill="none" stroke="hsl(var(--primary))" strokeWidth="1.5" opacity="0.3">
+                  <circle cx="32" cy="32" r="28" fill="none" stroke={strokeColor} strokeWidth="1.5" opacity="0.3">
                     <animate attributeName="r" values="28;31;28" dur="2s" repeatCount="indefinite" />
                     <animate attributeName="opacity" values="0.3;0.05;0.3" dur="2s" repeatCount="indefinite" />
                   </circle>
                 )}
                 {/* Flow indicator dots moving along the arc when open */}
                 {fcvOpen && (
-                  <circle r="2" fill="hsl(var(--primary))" opacity="0.6">
+                  <circle r="2" fill={strokeColor} opacity="0.7">
                     <animateMotion dur="2.5s" repeatCount="indefinite"
                       path="M32,4 A28,28 0 0,1 60,32" />
-                    <animate attributeName="opacity" values="0;0.7;0" dur="2.5s" repeatCount="indefinite" />
+                    <animate attributeName="opacity" values="0;0.8;0" dur="2.5s" repeatCount="indefinite" />
                   </circle>
                 )}
                 {/* Center value */}
                 <text x="32" y="38" textAnchor="middle" className="fill-foreground text-xl font-mono font-bold">{tag.value.toFixed(0)}%</text>
               </svg>
             </div>
-            <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">FCV Position</span>
+            <div className="flex flex-col items-center gap-1 w-full px-1">
+              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">FCV Position</span>
+              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border truncate max-w-full ${
+                isConfirmed ? 'bg-success/15 text-success border-success/30' :
+                isCharged ? 'bg-warning/15 text-warning border-warning/30' :
+                fcvOpen ? 'bg-primary/15 text-primary border-primary/30' :
+                'bg-muted/50 text-muted-foreground border-border'
+              }`}>
+                {statusDetail}
+              </span>
+            </div>
           </div>
         );
+      }
       default:
         return (
           <div className="flex items-baseline gap-2">
@@ -169,8 +191,22 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
   };
 
   const isPump = sensor.instrumentType === 'pump';
+  const isFcv = sensor.instrumentType === 'fcv';
 
   const getHealthBadge = () => {
+    if (isFcv) {
+      const isOpen = tag.value > 1;
+      return (
+        <span className={`text-[8px] sm:text-[9px] font-bold px-1.5 py-0.5 rounded-md tracking-wider ${
+          isOpen 
+            ? 'bg-success/15 text-success border border-success/30' 
+            : 'bg-destructive/15 text-destructive border border-destructive/30'
+        }`}>
+          {isOpen ? 'OPEN' : 'CLOSED'}
+        </span>
+      );
+    }
+
     if (connection === 'fault') {
       return <span className="text-[8px] sm:text-[9px] font-bold px-1.5 py-0.5 rounded-md tracking-wider bg-orange-500/15 text-orange-500 border border-orange-500/30">FAULT</span>;
     }
@@ -213,6 +249,12 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
   };
 
   const ConnIcon: React.FC<{ className?: string }> = ({ className }) => {
+    if (isFcv) {
+      const isOpen = tag.value > 1;
+      return (
+        <div className={`w-2 h-2 rounded-full shrink-0 ${isOpen ? 'bg-success pulse-live' : 'bg-destructive/70'}`} />
+      );
+    }
     if (connection === 'fault') return <TriangleAlert className={`${className} text-orange-500 animate-pulse`} />;
     if (connection === 'stale') return <CircleSlash className={`${className} text-warning animate-pulse`} />;
     if (connection === 'no-data') return <WifiOff className={`${className} text-destructive animate-pulse`} />;
@@ -248,7 +290,7 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
             {renderInstrument()}
           </div>
           <div className="flex items-center gap-1 mt-1">
-            {(isPump ? isPumpRunning : connection === 'connected') && (
+            {(isPump ? isPumpRunning : isFcv ? tag.value > 1 : connection === 'connected') && (
               <div className="w-1.5 h-1.5 rounded-full bg-success pulse-live shrink-0" />
             )}
             <span className="text-[9px] sm:text-[10px] text-muted-foreground font-mono truncate">{tag.timestamp.toLocaleTimeString()}</span>
@@ -346,6 +388,7 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
     prev.tag.lowSetpoint === next.tag.lowSetpoint &&
     prev.tag.alarmEnabled === next.tag.alarmEnabled &&
     prev.tag.status === next.tag.status &&
+    (prev.tag as any).statusDetail === (next.tag as any).statusDetail &&
     prev.sensor.id === next.sensor.id &&
     prev.section === next.section &&
     prev.index === next.index

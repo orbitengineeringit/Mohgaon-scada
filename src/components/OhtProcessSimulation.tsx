@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { MohgaonSensor } from '@/config/mohgaonSensors';
 import SensorStatusStrip from './SensorStatusStrip';
+import { useOhtFcvInterlock } from '@/hooks/useOhtFcvInterlock';
 
 interface CircularGaugeProps {
   cx: number;
@@ -132,23 +133,17 @@ const OhtProcessSimulation: React.FC<OhtProcessSimulationProps> = ({ sensors, ta
   const fInVal = fInTag?.value || 0;
   const totVal = totTag?.value || 0;
 
-  // Multi-Level Logic for FCV & Water Inflow:
-  // Primary requirement: Flow Meter MUST be actively running (> 0.2 m³/h)
-  const hasFlow = fInVal > 0.2;
+  const tankKey = config.groupKey || `oht-${config.label.replace('#', '')}`;
 
-  // Secondary verification: Pressure Transmitter threshold (PT >= 1.5 Bar)
-  const isPressurized = ptVal >= 1.5;
-
-  // Multi-Level Cross-Verification:
-  // Flow Meter is the prerequisite for physical fluid movement into the tank.
-  // When Flow Meter is active (> 0.2 m³/h), it is cross-verified by line pressure (PT >= 1.5)
-  // or sustained flow velocity (> 0.5 m³/h).
-  // If Flow Meter is 0.00 (even if PT reads 10 Bar due to static pressure or faulty transmitter),
-  // inflow is FALSE, FCV is CLOSED, and pipe water animation is completely OFF.
-  const isConfirmedInflow = hasFlow && (isPressurized || fInVal > 0.5);
-
-  // FCV is OPEN only when verified inflow is confirmed
-  const fcvOpen = isConfirmedInflow;
+  // SCADA Triple-Interlock FCV Verification:
+  // Requires Flow (> 0.2 m³/h) + Pressure (>= 1.5 Bar) + Physical Water Accumulation (Level rising OR Totalizer increasing)
+  const { isConfirmedInflow, fcvOpen } = useOhtFcvInterlock({
+    tankKey,
+    flowVal: fInVal,
+    ptVal,
+    ltVal,
+    totVal,
+  });
 
   // Visual constants matching IntakeProcessSimulation
   const pBody = "hsl(220 60% 42%)";

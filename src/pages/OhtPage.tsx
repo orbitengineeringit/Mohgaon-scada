@@ -11,6 +11,7 @@ import { BarChart2, LayoutGrid, Activity } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import OhtIcon from '@/components/icons/OhtIcon';
 import OhtProcessSimulation from '@/components/OhtProcessSimulation';
+import { useOhtFcvInterlock } from '@/hooks/useOhtFcvInterlock';
 
 interface OhtConfig {
   title: string;
@@ -60,15 +61,15 @@ const OhtSubsection: React.FC<{ config: OhtConfig; tags: any[]; viewMode: 'cards
   const totTag = tags.find((t: any) => t.id === `${prefix}-Totalizer`);
   const totVal = totTag?.value || 0;
 
-  // Multi-Level Cross-Verification for Automated FCV:
-  // Primary requirement: Flow Meter MUST be actively running (> 0.2 m³/h).
-  // Cross-verified by line pressure (PT >= 1.5 Bar) or sustained flow rate (> 0.5 m³/h).
-  // If Flow Meter is 0.00 (even if PT reads 10 Bar due to static pressure or faulty transmitter),
-  // FCV remains CLOSED.
-  const hasFlow = flowVal > 0.2;
-  const isPressurized = ptVal >= 1.5;
-  const isConfirmedInflow = hasFlow && (isPressurized || flowVal > 0.5);
-  const fcvOpen = isConfirmedInflow;
+  // SCADA Triple-Interlock FCV Verification:
+  // Requires Flow (> 0.2 m³/h) + Pressure (>= 1.5 Bar) + Physical Water Accumulation (Level rising OR Totalizer increasing)
+  const { fcvOpen } = useOhtFcvInterlock({
+    tankKey: config.groupKey,
+    flowVal,
+    ptVal,
+    ltVal,
+    totVal,
+  });
 
   const fcvSensor: MohgaonSensor = useMemo(() => ({
     id: `${prefix}-FCV`,

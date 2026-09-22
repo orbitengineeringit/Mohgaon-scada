@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useScada } from '@/contexts/ScadaContext';
 import StatusBar from '@/components/StatusBar';
@@ -60,40 +60,14 @@ const OhtSubsection: React.FC<{ config: OhtConfig; tags: any[]; viewMode: 'cards
   const totTag = tags.find((t: any) => t.id === `${prefix}-Totalizer`);
   const totVal = totTag?.value || 0;
 
-  // Multi-Level Logic for Automated FCV:
-  // Track previous level and totalizer to detect physical increments
-  const prevLtRef = useRef(ltVal);
-  const prevTotRef = useRef(totVal);
-  const [isLevelRising, setIsLevelRising] = useState(false);
-  const [isTotIncreasing, setIsTotIncreasing] = useState(false);
-
-  useEffect(() => {
-    if (ltVal > prevLtRef.current + 0.03) {
-      setIsLevelRising(true);
-    } else if (ltVal < prevLtRef.current - 0.08) {
-      setIsLevelRising(false);
-    }
-    prevLtRef.current = ltVal;
-  }, [ltVal]);
-
-  useEffect(() => {
-    if (totVal > prevTotRef.current + 0.05) {
-      setIsTotIncreasing(true);
-    }
-    prevTotRef.current = totVal;
-  }, [totVal]);
-
-  // Level 1: Active Flow Meter verification
+  // Multi-Level Cross-Verification for Automated FCV:
+  // Primary requirement: Flow Meter MUST be actively running (> 0.2 m³/h).
+  // Cross-verified by line pressure (PT >= 1.5 Bar) or sustained flow rate (> 0.5 m³/h).
+  // If Flow Meter is 0.00 (even if PT reads 10 Bar due to static pressure or faulty transmitter),
+  // FCV remains CLOSED.
   const hasFlow = flowVal > 0.2;
-  // Level 2: Pressure threshold
   const isPressurized = ptVal >= 1.5;
-
-  // Level 3: Cross-Verification Guard against false/stuck Pressure Transmitters
-  // (e.g. PT = 10.1 Bar, but Flow is 0, Totalizer is not moving, and Level is not rising)
-  const isConfirmedInflow = hasFlow
-    ? (isPressurized || isLevelRising || isTotIncreasing || flowVal > 1.0)
-    : (isPressurized && isLevelRising);
-
+  const isConfirmedInflow = hasFlow && (isPressurized || flowVal > 0.5);
   const fcvOpen = isConfirmedInflow;
 
   const fcvSensor: MohgaonSensor = useMemo(() => ({

@@ -133,42 +133,19 @@ const OhtProcessSimulation: React.FC<OhtProcessSimulationProps> = ({ sensors, ta
   const totVal = totTag?.value || 0;
 
   // Multi-Level Logic for FCV & Water Inflow:
-  // Track previous level and totalizer to detect physical increments
-  const prevLtRef = useRef(ltVal);
-  const prevTotRef = useRef(totVal);
-  const [isLevelRising, setIsLevelRising] = useState(false);
-  const [isTotIncreasing, setIsTotIncreasing] = useState(false);
-
-  useEffect(() => {
-    if (ltVal > prevLtRef.current + 0.03) {
-      setIsLevelRising(true);
-    } else if (ltVal < prevLtRef.current - 0.08) {
-      setIsLevelRising(false);
-    }
-    prevLtRef.current = ltVal;
-  }, [ltVal]);
-
-  useEffect(() => {
-    if (totVal > prevTotRef.current + 0.05) {
-      setIsTotIncreasing(true);
-    }
-    prevTotRef.current = totVal;
-  }, [totVal]);
-
-  // Level 1: Active Flow Meter verification (Flow must be positive)
+  // Primary requirement: Flow Meter MUST be actively running (> 0.2 m³/h)
   const hasFlow = fInVal > 0.2;
 
-  // Level 2: Line Pressure verification
+  // Secondary verification: Pressure Transmitter threshold (PT >= 1.5 Bar)
   const isPressurized = ptVal >= 1.5;
 
-  // Level 3: Cross-Verification Guard against false/stuck Pressure Transmitters
-  // (e.g. PT = 10.1 Bar, but Flow is 0, Totalizer is not moving, and Level is not rising)
-  // To confirm genuine water inflow:
-  // - If Flow meter is ON (> 0.2 m³/h), verify with Pressure OR Level rise OR Totalizer increment OR significant flow (> 1.0)
-  // - If Flow meter is OFF (0 m³/h), NEVER rely on Pressure alone — only confirm if Tank Level is physically rising
-  const isConfirmedInflow = hasFlow
-    ? (isPressurized || isLevelRising || isTotIncreasing || fInVal > 1.0)
-    : (isPressurized && isLevelRising);
+  // Multi-Level Cross-Verification:
+  // Flow Meter is the prerequisite for physical fluid movement into the tank.
+  // When Flow Meter is active (> 0.2 m³/h), it is cross-verified by line pressure (PT >= 1.5)
+  // or sustained flow velocity (> 0.5 m³/h).
+  // If Flow Meter is 0.00 (even if PT reads 10 Bar due to static pressure or faulty transmitter),
+  // inflow is FALSE, FCV is CLOSED, and pipe water animation is completely OFF.
+  const isConfirmedInflow = hasFlow && (isPressurized || fInVal > 0.5);
 
   // FCV is OPEN only when verified inflow is confirmed
   const fcvOpen = isConfirmedInflow;
@@ -324,13 +301,13 @@ const OhtProcessSimulation: React.FC<OhtProcessSimulationProps> = ({ sensors, ta
           {/* Inlet Pipe before FCV */}
           <g>
             {drawPipe(inPipeBeforeFcv, pipeW)}
-            {isConfirmedInflow && drawWaterFlow(inPipeBeforeFcv, Math.max(fInVal, 15), true)}
+            {isConfirmedInflow && fInVal > 0.2 && drawWaterFlow(inPipeBeforeFcv, fInVal)}
           </g>
 
           {/* Inlet Pipe after FCV */}
           <g>
             {drawPipe(inPipeAfterFcv, pipeW)}
-            {isConfirmedInflow && drawWaterFlow(inPipeAfterFcv, Math.max(fInVal, 15), true)}
+            {isConfirmedInflow && fInVal > 0.2 && drawWaterFlow(inPipeAfterFcv, fInVal)}
           </g>
 
           {/* Outlet Pipe */}

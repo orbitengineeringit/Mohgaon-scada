@@ -39,7 +39,7 @@ const VALID_RANGE: Record<string, { min: number; max: number }> = {
   "WTP-LT-BW": { min: 0, max: 100 }, "WTP-HeaderPT": { min: 0, max: 10 },
   "WTP-PT1": { min: 0, max: 10 }, "WTP-PT2": { min: 0, max: 10 },
   ...Object.fromEntries([1, 2, 3, 4].flatMap((n) => [
-    [`OHT${n}-PT`, { min: 0, max: n === 3 ? 16 : 10 }],
+    [`OHT${n}-PT`, { min: 0, max: (n === 2 || n === 3) ? 16 : 10 }],
     [`OHT${n}-LT`, { min: 0, max: 100 }],
     [`OHT${n}-Flow-IN`, { min: 0, max: 50 }],
   ])),
@@ -50,6 +50,10 @@ const isPercentageLevel = (id: string): boolean =>
 
 function normalizeReading(id: string, value: number): number | undefined {
   if (!Number.isFinite(value)) return undefined;
+  // If WTP inlet transmitter publishes Litres/hr (e.g., ~71000 L/hr), convert to m³/hr (~71.0 m³/hr)
+  if (id === "WTP-Flow-IN" && value > 1000 && value <= 200000) {
+    value = value / 1000;
+  }
   const range = VALID_RANGE[id];
   if (!range) return value;
   if (value >= range.min && value <= range.max) return value;
@@ -68,8 +72,19 @@ function toIstString(d: Date | string | number): string {
     `${pad(ist.getUTCMilliseconds(), 3)}`;
 }
 
-const mld = (m3hr: number | null | undefined): number | undefined =>
-  m3hr == null || isNaN(Number(m3hr)) ? undefined : Number((Number(m3hr) * 0.024).toFixed(4));
+const useStrictMld = Deno.env.get("GIS_USE_STRICT_MLD") === "true";
+
+const mld = (m3hr: number | null | undefined): number | undefined => {
+  if (m3hr == null || isNaN(Number(m3hr))) return undefined;
+  const val = Number(m3hr);
+  // If strict MLD is configured, scale by 0.024; otherwise send instantaneous flow in m³/hr
+  // matching government portal displays across other commissioned schemes (Mandav, Lahar, Norojabad).
+  if (useStrictMld) {
+    return Number((val * 0.024).toFixed(4));
+  }
+  if (Math.abs(val) < 0.05) return 0;
+  return Number(val.toFixed(2));
+};
 
 const num = (v: number | null | undefined): number | undefined =>
   v == null || isNaN(Number(v)) ? undefined : Number(v);

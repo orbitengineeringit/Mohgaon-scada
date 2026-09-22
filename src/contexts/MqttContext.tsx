@@ -255,7 +255,7 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
       if (topic.includes('OHT01') || topic.includes('OHT-1') || topic.includes('OHT1') || topic.includes('Ov1h')) {
         return { section: 'oht', subsection: 'OHT-1' };
       }
-      if (topic.includes('OHT02') || topic.includes('OHT-2') || topic.includes('OHT2') || topic.includes('Ov2h')) {
+      if (topic.includes('OHT02') || topic.includes('OHT-2') || topic.includes('OHT2') || topic.toLowerCase().includes('oht-2') || topic.includes('Ov2h')) {
         return { section: 'oht', subsection: 'OHT-2' };
       }
       if (topic.includes('OHT03') || topic.includes('OHT-3') || topic.includes('OHT3') || topic.toLowerCase().includes('oht-3') || topic.includes('Ov3h')) {
@@ -275,7 +275,7 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
       if (payloadStr.includes('02500225110500008735') || payloadStr.includes('RLT') || payloadStr.includes('INTAKE_') || payloadStr.includes('INT_')) return { section: 'intake' };
       if (payloadStr.includes('02500225110500007666') || payloadStr.includes('RAW_PH') || payloadStr.includes('RAW_EFM') || payloadStr.includes('FLOWMETER') || payloadStr.includes('CWR_') || payloadStr.includes('BW_LT')) return { section: 'wtp' };
       if (payloadStr.includes('OHT1_')) return { section: 'oht', subsection: 'OHT-1' };
-      if (payloadStr.includes('OHT2_')) return { section: 'oht', subsection: 'OHT-2' };
+      if (payloadStr.includes('02500225110500007237') || payloadStr.includes('OHT2_')) return { section: 'oht', subsection: 'OHT-2' };
       if (payloadStr.includes('OHT3_')) return { section: 'oht', subsection: 'OHT-3' };
       if (payloadStr.includes('OHT4_')) return { section: 'oht', subsection: 'OHT-4' };
     }

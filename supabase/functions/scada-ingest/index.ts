@@ -40,6 +40,10 @@ type ParsedMessage = {
 
 function normalizeSensorValue(sensor: Sensor, value: number): number | null {
   if (!Number.isFinite(value)) return null;
+  // If WTP inlet transmitter publishes Litres/hr (e.g., ~71000 L/hr), convert to m³/hr (~71.0 m³/hr)
+  if (sensor.id === "WTP-Flow-IN" && value > 1000 && value <= 200000) {
+    value = value / 1000;
+  }
   if (value >= sensor.min && value <= sensor.max) return value;
 
   const isPercentagePosition = sensor.unit === "%" &&
@@ -55,7 +59,7 @@ const DEFAULT_TOPICS = {
   INTAKE: "mohgaon/intake",
   WTP: "mohgaon/wtp",
   OHT1: "OES/M7g4/Ov1h/8672x4Af",
-  OHT2: "OES/M7g4/Ov2h/8672x4Af",
+  OHT2: "mohgaon/oht-2",
   OHT3: "mohgaon/oht-3",
   OHT4: "OES/M7g4/Ov4h/8672x4Af",
 };
@@ -63,12 +67,12 @@ const DEFAULT_TOPICS = {
 const ohtSensors = (n: number): Sensor[] => {
   const prefix = `OHT${n}`;
   const subsection = `OHT-${n}`;
-  const isLiveOht3 = n === 3;
+  const isLiveOht = n === 2 || n === 3;
   return [
-    { id: `${prefix}-PT`, mqttKey: isLiveOht3 ? "PT" : "PT_01", label: "Pressure (PT)", unit: "Bar", min: 0, max: isLiveOht3 ? 16 : 10, section: "oht", subsection, instrumentType: "pt" },
-    { id: `${prefix}-LT`, mqttKey: isLiveOht3 ? "LT" : "LEVEL", label: "Level (LT)", unit: "%", min: 0, max: 100, section: "oht", subsection, instrumentType: "lt" },
-    { id: `${prefix}-Flow-IN`, mqttKey: isLiveOht3 ? "EFM_FLOW" : "FLOW", label: "Flow Meter (Inlet)", unit: "m³/hr", min: 0, max: 50, section: "oht", subsection, instrumentType: "flow" },
-    { id: `${prefix}-Totalizer`, mqttKey: isLiveOht3 ? "EFM_1_2" : "TOTALIZER", label: isLiveOht3 ? "EFM 1 Totalizer 2" : "Totalizer", unit: "m³", min: isLiveOht3 ? -999999 : 0, max: 999999, section: "oht", subsection, instrumentType: "totalizer" },
+    { id: `${prefix}-PT`, mqttKey: isLiveOht ? "PT" : "PT_01", label: "Pressure (PT)", unit: "Bar", min: 0, max: isLiveOht ? 16 : 10, section: "oht", subsection, instrumentType: "pt" },
+    { id: `${prefix}-LT`, mqttKey: isLiveOht ? "LT" : "LEVEL", label: "Level (LT)", unit: "%", min: 0, max: 100, section: "oht", subsection, instrumentType: "lt" },
+    { id: `${prefix}-Flow-IN`, mqttKey: isLiveOht ? "EFM_FLOW" : "FLOW", label: "Flow Meter (Inlet)", unit: "m³/hr", min: 0, max: 50, section: "oht", subsection, instrumentType: "flow" },
+    { id: `${prefix}-Totalizer`, mqttKey: isLiveOht ? "EFM_1_2" : "TOTALIZER", label: isLiveOht ? "Totalizer" : "Totalizer", unit: "m³", min: isLiveOht ? -999999 : 0, max: 999999, section: "oht", subsection, instrumentType: "totalizer" },
   ];
 };
 

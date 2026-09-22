@@ -123,17 +123,8 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
       case 'chlorine':
         return <ChlorineAnalyzer value={tag.value} max={tag.max} unit={tag.unit} />;
       case 'fcv': {
-        const fcvOpen = tag.value > 1;
-        const statusDetail = (tag as any).statusDetail || (fcvOpen ? 'OPEN (AUTO)' : 'CLOSED (AUTO)');
-        const isConfirmed = statusDetail.includes('CONFIRMED');
-        const isCharged = statusDetail.includes('CHARGED');
-        const strokeColor = isConfirmed
-          ? 'hsl(var(--success))'
-          : isCharged
-          ? 'hsl(var(--warning))'
-          : fcvOpen
-          ? 'hsl(var(--primary))'
-          : 'hsl(var(--muted))';
+        const fcvOpen = tag.value > 0.5;
+        const strokeColor = fcvOpen ? 'hsl(var(--success))' : 'hsl(var(--destructive))';
 
         return (
           <div className="text-center w-full flex flex-col items-center">
@@ -143,7 +134,7 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
                 <circle cx="32" cy="32" r="28" fill="none" stroke="hsl(var(--muted))" strokeWidth="5" />
                 {/* Active arc */}
                 <circle cx="32" cy="32" r="28" fill="none" stroke={strokeColor} strokeWidth="5"
-                  strokeDasharray={`${(tag.value / 100) * 175.93} 175.93`}
+                  strokeDasharray={`${fcvOpen ? 175.93 : 0} 175.93`}
                   strokeLinecap="round" transform="rotate(-90 32 32)" className="transition-all duration-500" />
                 {/* Pulsing glow ring when valve is open */}
                 {fcvOpen && (
@@ -160,20 +151,14 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
                     <animate attributeName="opacity" values="0;0.8;0" dur="2.5s" repeatCount="indefinite" />
                   </circle>
                 )}
-                {/* Center value */}
-                <text x="32" y="38" textAnchor="middle" className="fill-foreground text-xl font-mono font-bold">{tag.value.toFixed(0)}%</text>
+                {/* Center text: normal OPEN / CLOSED, no % */}
+                <text x="32" y="38" textAnchor="middle" className={`text-base font-mono font-bold ${fcvOpen ? 'fill-success' : 'fill-destructive'}`}>
+                  {fcvOpen ? 'OPEN' : 'CLOSED'}
+                </text>
               </svg>
             </div>
             <div className="flex flex-col items-center gap-1 w-full px-1">
-              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">FCV Position</span>
-              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border truncate max-w-full ${
-                isConfirmed ? 'bg-success/15 text-success border-success/30' :
-                isCharged ? 'bg-warning/15 text-warning border-warning/30' :
-                fcvOpen ? 'bg-primary/15 text-primary border-primary/30' :
-                'bg-muted/50 text-muted-foreground border-border'
-              }`}>
-                {statusDetail}
-              </span>
+              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Valve Status</span>
             </div>
           </div>
         );
@@ -195,7 +180,7 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
 
   const getHealthBadge = () => {
     if (isFcv) {
-      const isOpen = tag.value > 1;
+      const isOpen = tag.value > 0.5;
       return (
         <span className={`text-[8px] sm:text-[9px] font-bold px-1.5 py-0.5 rounded-md tracking-wider ${
           isOpen 
@@ -250,7 +235,7 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
 
   const ConnIcon: React.FC<{ className?: string }> = ({ className }) => {
     if (isFcv) {
-      const isOpen = tag.value > 1;
+      const isOpen = tag.value > 0.5;
       return (
         <div className={`w-2 h-2 rounded-full shrink-0 ${isOpen ? 'bg-success pulse-live' : 'bg-destructive/70'}`} />
       );
@@ -290,7 +275,7 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
             {renderInstrument()}
           </div>
           <div className="flex items-center gap-1 mt-1">
-            {(isPump ? isPumpRunning : isFcv ? tag.value > 1 : connection === 'connected') && (
+            {(isPump ? isPumpRunning : isFcv ? tag.value > 0.5 : connection === 'connected') && (
               <div className="w-1.5 h-1.5 rounded-full bg-success pulse-live shrink-0" />
             )}
             <span className="text-[9px] sm:text-[10px] text-muted-foreground font-mono truncate">{tag.timestamp.toLocaleTimeString()}</span>

@@ -57,37 +57,44 @@ const OhtSubsection: React.FC<{ config: OhtConfig; tags: any[]; viewMode: 'cards
   const ptVal = ptTag?.value || 0;
   const flowVal = flowTag?.value || 0;
   const ltVal = ltTag?.value || 0;
+  const totTag = tags.find((t: any) => t.id === `${prefix}-Totalizer`);
+  const totVal = totTag?.value || 0;
 
   // Multi-Level Logic for Automated FCV:
-  // Level 1: Pressure threshold (PT >= 1.5 Bar)
-  const isPressurized = ptVal >= 1.5;
-  // Level 2: Active flow confirmation (Flow > 0.3 m³/h)
-  const hasFlow = flowVal > 0.3;
-
-  // Level trend tracking to confirm filling
+  // Track previous level and totalizer to detect physical increments
   const prevLtRef = useRef(ltVal);
-  const [isFilling, setIsFilling] = useState(false);
+  const prevTotRef = useRef(totVal);
+  const [isLevelRising, setIsLevelRising] = useState(false);
+  const [isTotIncreasing, setIsTotIncreasing] = useState(false);
 
   useEffect(() => {
-    if (ltVal > prevLtRef.current + 0.05) {
-      setIsFilling(true);
-    } else if (ltVal < prevLtRef.current - 0.1) {
-      setIsFilling(false);
+    if (ltVal > prevLtRef.current + 0.03) {
+      setIsLevelRising(true);
+    } else if (ltVal < prevLtRef.current - 0.08) {
+      setIsLevelRising(false);
     }
     prevLtRef.current = ltVal;
   }, [ltVal]);
 
-  const fcvOpen = isPressurized || hasFlow;
-  const isFlowConfirmed = isPressurized && (hasFlow || isFilling);
-  const isUnconfirmedPressure = isPressurized && !hasFlow && !isFilling;
+  useEffect(() => {
+    if (totVal > prevTotRef.current + 0.05) {
+      setIsTotIncreasing(true);
+    }
+    prevTotRef.current = totVal;
+  }, [totVal]);
 
-  const fcvStatusDetail = isFlowConfirmed
-    ? 'INFLOW CONFIRMED'
-    : isUnconfirmedPressure
-    ? 'CHARGED • AWAITING FLOW'
-    : fcvOpen
-    ? 'FLOW DETECTED'
-    : 'LINE DEPRESSURIZED';
+  // Level 1: Active Flow Meter verification
+  const hasFlow = flowVal > 0.2;
+  // Level 2: Pressure threshold
+  const isPressurized = ptVal >= 1.5;
+
+  // Level 3: Cross-Verification Guard against false/stuck Pressure Transmitters
+  // (e.g. PT = 10.1 Bar, but Flow is 0, Totalizer is not moving, and Level is not rising)
+  const isConfirmedInflow = hasFlow
+    ? (isPressurized || isLevelRising || isTotIncreasing || flowVal > 1.0)
+    : (isPressurized && isLevelRising);
+
+  const fcvOpen = isConfirmedInflow;
 
   const fcvSensor: MohgaonSensor = useMemo(() => ({
     id: `${prefix}-FCV`,

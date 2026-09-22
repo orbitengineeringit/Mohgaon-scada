@@ -317,7 +317,7 @@ const OhtProcessSimulation: React.FC<OhtProcessSimulationProps> = ({ sensors, ta
           {/* Inlet Pipe after FCV */}
           <g>
             {drawPipe(inPipeAfterFcv, pipeW)}
-            {fcvOpen && (fInVal > 0 || isFlowConfirmed) && drawWaterFlow(inPipeAfterFcv, Math.max(fInVal, 15), true)}
+            {fcvOpen && drawWaterFlow(inPipeAfterFcv, Math.max(fInVal, 15), true)}
           </g>
 
           {/* Outlet Pipe */}
@@ -555,33 +555,15 @@ const OhtProcessSimulation: React.FC<OhtProcessSimulationProps> = ({ sensors, ta
                     width="90"
                     height="28"
                     rx="7"
-                    fill={
-                      !fcvOpen
-                        ? 'hsl(var(--destructive) / 0.1)'
-                        : isUnconfirmedPressure
-                        ? 'hsl(var(--warning) / 0.1)'
-                        : 'hsl(var(--success) / 0.1)'
-                    }
-                    stroke={
-                      !fcvOpen
-                        ? 'hsl(var(--destructive))'
-                        : isUnconfirmedPressure
-                        ? 'hsl(var(--warning))'
-                        : 'hsl(var(--success))'
-                    }
+                    fill={fcvOpen ? 'hsl(var(--success) / 0.12)' : 'hsl(var(--destructive) / 0.12)'}
+                    stroke={fcvOpen ? 'hsl(var(--success))' : 'hsl(var(--destructive))'}
                     strokeWidth="1.5"
                   />
                   <circle
                     cx={fcvX - 25}
                     cy={efmY + 42}
                     r="4.5"
-                    fill={
-                      !fcvOpen
-                        ? 'hsl(var(--destructive))'
-                        : isUnconfirmedPressure
-                        ? 'hsl(var(--warning))'
-                        : 'hsl(var(--success))'
-                    }
+                    fill={fcvOpen ? 'hsl(var(--success))' : 'hsl(var(--destructive))'}
                     className={fcvOpen ? 'animate-pulse' : ''}
                   />
                   <text
@@ -590,13 +572,7 @@ const OhtProcessSimulation: React.FC<OhtProcessSimulationProps> = ({ sensors, ta
                     textAnchor="middle"
                     fontSize="12"
                     fontWeight="900"
-                    fill={
-                      !fcvOpen
-                        ? 'hsl(var(--destructive))'
-                        : isUnconfirmedPressure
-                        ? 'hsl(var(--warning))'
-                        : 'hsl(var(--success))'
-                    }
+                    fill={fcvOpen ? 'hsl(var(--success))' : 'hsl(var(--destructive))'}
                     fontFamily="ui-monospace, monospace"
                     letterSpacing="0.5px"
                   >

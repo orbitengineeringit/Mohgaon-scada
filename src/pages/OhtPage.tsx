@@ -110,9 +110,9 @@ const OhtSubsection: React.FC<{ config: OhtConfig; tags: any[]; viewMode: 'cards
     min: 0,
     max: 1,
     timestamp: ptTag?.timestamp || new Date(),
-    status: (isFlowConfirmed ? 'normal' : isUnconfirmedPressure ? 'warning' : 'normal') as any,
-    statusDetail: fcvStatusDetail,
-  }), [prefix, fcvOpen, isFlowConfirmed, isUnconfirmedPressure, fcvStatusDetail, ptTag?.timestamp]);
+    status: (fcvOpen ? 'normal' : 'inactive') as any,
+    statusDetail: fcvOpen ? 'OPEN' : 'CLOSED',
+  }), [prefix, fcvOpen, ptTag?.timestamp]);
 
   // Combine physical sensors with the automated FCV
   const allSensors = useMemo(() => [...config.sensors, fcvSensor], [config.sensors, fcvSensor]);

@@ -23,6 +23,12 @@ import { AlarmBellButton } from './AlarmBellButton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useTagConnection } from '@/hooks/useTagConnection';
 
+/**
+ * Master UI toggle to control visibility of status indicators (health badges, connection icons, alert borders, live status dots) on instrument cards.
+ * Set to `true` anytime you wish to restore all badges (ON, OFF, ZERO, OPEN, CLOSED, FAULT, DELAY) and status icons on cards.
+ */
+export const SHOW_CARD_STATUS_INDICATOR = false;
+
 interface InstrumentCardProps {
   tag: TagData;
   sensor: MohgaonSensor;
@@ -179,6 +185,8 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
   const isFcv = sensor.instrumentType === 'fcv';
 
   const getHealthBadge = () => {
+    if (!SHOW_CARD_STATUS_INDICATOR) return null;
+
     if (isFcv) {
       const isOpen = tag.value > 0.5;
       return (
@@ -234,6 +242,8 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
   };
 
   const ConnIcon: React.FC<{ className?: string }> = ({ className }) => {
+    if (!SHOW_CARD_STATUS_INDICATOR) return null;
+
     if (isFcv) {
       const isOpen = tag.value > 0.5;
       return (
@@ -259,8 +269,8 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
     return (
       <div
         className={`premium-card rounded-xl p-3 sm:p-4 relative overflow-visible opacity-0 animate-fade-in flex flex-col h-full ${
-          connection === 'no-data' ? 'border-destructive/50' : ''
-        } ${connection === 'stale' ? 'border-warning/50' : ''} ${connection === 'fault' ? 'border-orange-500/50' : ''} ${!isPump && connection === 'inactive' ? 'border-sky-500/30' : ''}`}
+          SHOW_CARD_STATUS_INDICATOR && connection === 'no-data' ? 'border-destructive/50' : ''
+        } ${SHOW_CARD_STATUS_INDICATOR && connection === 'stale' ? 'border-warning/50' : ''} ${SHOW_CARD_STATUS_INDICATOR && connection === 'fault' ? 'border-orange-500/50' : ''} ${SHOW_CARD_STATUS_INDICATOR && !isPump && connection === 'inactive' ? 'border-sky-500/30' : ''}`}
         style={{ animationDelay: `${index * 40}ms` }}
       >
         <div className="relative z-10 flex flex-col flex-1">
@@ -275,7 +285,7 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
             {renderInstrument()}
           </div>
           <div className="flex items-center gap-1 mt-1">
-            {(isPump ? isPumpRunning : isFcv ? tag.value > 0.5 : connection === 'connected') && (
+            {SHOW_CARD_STATUS_INDICATOR && (isPump ? isPumpRunning : isFcv ? tag.value > 0.5 : connection === 'connected') && (
               <div className="w-1.5 h-1.5 rounded-full bg-success pulse-live shrink-0" />
             )}
             <span className="text-[9px] sm:text-[10px] text-muted-foreground font-mono truncate">{tag.timestamp.toLocaleTimeString()}</span>
@@ -292,10 +302,10 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
           premium-card rounded-xl p-2 sm:p-3 relative overflow-visible cursor-pointer
           opacity-0 animate-fade-in
           flex flex-col h-full
-          ${connection === 'no-data' ? 'border-destructive/50' : ''}
-          ${connection === 'stale' ? 'border-warning/50' : ''}
-          ${connection === 'fault' ? 'border-orange-500/50' : ''}
-          ${connection === 'inactive' ? 'border-sky-500/30' : ''}
+          ${SHOW_CARD_STATUS_INDICATOR && connection === 'no-data' ? 'border-destructive/50' : ''}
+          ${SHOW_CARD_STATUS_INDICATOR && connection === 'stale' ? 'border-warning/50' : ''}
+          ${SHOW_CARD_STATUS_INDICATOR && connection === 'fault' ? 'border-orange-500/50' : ''}
+          ${SHOW_CARD_STATUS_INDICATOR && connection === 'inactive' ? 'border-sky-500/30' : ''}
         `}
         style={{ animationDelay: `${index * 40}ms` }}
         onClick={() => setShowTrends(true)}
@@ -347,7 +357,7 @@ const InstrumentCard: React.FC<InstrumentCardProps> = memo(({ tag, sensor, secti
             )}
 
             <div className="flex items-center gap-1 mt-1">
-              {connection === 'connected' && <div className="w-1.5 h-1.5 rounded-full bg-success pulse-live shrink-0" />}
+              {SHOW_CARD_STATUS_INDICATOR && connection === 'connected' && <div className="w-1.5 h-1.5 rounded-full bg-success pulse-live shrink-0" />}
               <span className="text-[9px] sm:text-[10px] text-muted-foreground font-mono truncate">{tag.timestamp.toLocaleTimeString()}</span>
             </div>
           </div>

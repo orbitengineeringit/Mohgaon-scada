@@ -429,6 +429,7 @@ const HistoryPage: React.FC = () => {
     if (!globalFilters.startDate || !globalFilters.endDate) return;
     setIsExporting(true);
     const startedAt = Date.now();
+    let exportPhase: 'count' | 'fetch' | 'build' | 'download' = 'count';
     setExportProgress({ open: true, phase: 'estimating', fetched: 0, total: 0, estSec: 0, startedAt });
     try {
       const startTime = startOfDay(globalFilters.startDate).toISOString();
@@ -463,7 +464,8 @@ const HistoryPage: React.FC = () => {
         return;
       }
 
-      // Phase 2: parallel paginated fetch (8 pages concurrent)
+      // Phase 2: parallel paginated fetch (6 pages concurrent)
+      exportPhase = 'fetch';
       const PAGE = 1000;
       const totalPages = Math.ceil(totalCountVal / PAGE);
       const CONCURRENCY = 6;
@@ -544,6 +546,7 @@ const HistoryPage: React.FC = () => {
       const exportCount = processed.length;
 
       // Phase 3: build workbook
+      exportPhase = 'build';
       setExportProgress(p => ({ ...p, phase: 'building' }));
       const wb = new ExcelJS.Workbook();
       wb.creator = plantName;
@@ -581,9 +584,17 @@ const HistoryPage: React.FC = () => {
       // if data didn't exist for the full selected period — e.g. plant started later).
       let actualStr = '';
       if (processed.length > 0) {
-        const times = processed.map(l => new Date(l.timestamp).getTime());
-        const minT = new Date(Math.min(...times));
-        const maxT = new Date(Math.max(...times));
+        // Passing every timestamp as a Math.min/Math.max argument throws a
+        // RangeError once a date range contains enough rows.
+        let earliest = Infinity;
+        let latest = -Infinity;
+        for (const log of processed) {
+          const time = new Date(log.timestamp).getTime();
+          if (time < earliest) earliest = time;
+          if (time > latest) latest = time;
+        }
+        const minT = new Date(earliest);
+        const maxT = new Date(latest);
         const aS = format(minT, 'd MMM yyyy');
         const aE = format(maxT, 'd MMM yyyy');
         const rangeMismatch =
@@ -607,11 +618,11 @@ const HistoryPage: React.FC = () => {
       // Row 4: Header
       const headerRow = ws.getRow(4);
       const headers = ['⏱  5-min interval', '🏭  Section', '🔧  Sensor Type', '🏷  Label / Tag', '📈  Value', '⚠  Unit', 'Received at (IST)'];
-      const headerColors = ['FF2563EB', 'FFDC2626', 'FF7C3AED', 'FF059669', 'FFEA580C', 'FFCA8A04'];
+      const headerColors = ['FF2563EB', 'FFDC2626', 'FF7C3AED', 'FF059669', 'FFEA580C', 'FFCA8A04', 'FF0891B2'];
       headers.forEach((h, i) => {
         const c = headerRow.getCell(i + 1);
         c.value = h;
-        c.font = { name: 'Segoe UI', size: 11, bold: true, color: { argb: 'FF' + headerColors[i].slice(2) } };
+        c.font = { name: 'Segoe UI', size: 11, bold: true, color: { argb: headerColors[i] } };
         c.alignment = { horizontal: i === 4 ? 'right' : 'left', vertical: 'middle' };
         c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF064E3B' } };
         c.border = {
@@ -692,6 +703,7 @@ const HistoryPage: React.FC = () => {
       });
 
       const buffer = await wb.xlsx.writeBuffer();
+      exportPhase = 'download';
       const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
@@ -703,7 +715,8 @@ const HistoryPage: React.FC = () => {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      URL.revokeObjectURL(link.href);
+      // Give the browser time to start reading the file before releasing it.
+      setTimeout(() => URL.revokeObjectURL(link.href), 60_000);
 
       setExportProgress(p => ({ ...p, phase: 'done' }));
       setTimeout(() => setExportProgress(p => ({ ...p, open: false })), 1200);
@@ -711,7 +724,12 @@ const HistoryPage: React.FC = () => {
     } catch (error) {
       logError('History.exportExcel', error);
       setExportProgress(p => ({ ...p, open: false }));
-      toast({ title: 'Export Failed', description: 'Failed to generate Excel file.', variant: 'destructive' });
+      const description = exportPhase === 'count' || exportPhase === 'fetch'
+        ? 'Could not load history data. Check your connection and try again.'
+        : exportPhase === 'build'
+          ? 'Could not build the Excel file. Try a shorter date range or a larger interval.'
+          : 'The Excel file was created, but the download could not start. Please try again.';
+      toast({ title: 'Export Failed', description, variant: 'destructive' });
     } finally {
       setIsExporting(false);
     }

@@ -29,17 +29,16 @@ export interface MohgaonSensor {
 }
 
 // ==================== OHT SENSORS ====================
-// Operator-facing model: every OHT has exactly four installed instruments.
-// OHT-2 and OHT-3 publish live RTU tags: PT, LT, EFM_FLOW, and EFM_1_2.
+// Operator-facing model: every OHT (1, 2, 3, 4) has exactly four installed instruments.
+// All OHTs publish live RTU tags: PT, LT, EFM_FLOW, and EFM_1_2.
 const createOhtSensors = (ohtNum: number): MohgaonSensor[] => {
   const prefix = `OHT${ohtNum}`;
   const sub = `OHT-${ohtNum}`;
-  const isLiveOht = ohtNum === 2 || ohtNum === 3;
   return [
-    { id: `${prefix}-PT`, mqttKey: isLiveOht ? 'PT' : `${prefix}_PT`, label: 'Pressure (PT)', unit: 'Bar', min: 0, max: isLiveOht ? 16 : 10, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'pt' },
-    { id: `${prefix}-LT`, mqttKey: isLiveOht ? 'LT' : `${prefix}_LT`, label: 'Level (LT)', unit: '%', min: 0, max: 100, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'lt' },
-    { id: `${prefix}-Flow-IN`, mqttKey: isLiveOht ? 'EFM_FLOW' : `${prefix}_FLOW`, label: 'Flow Meter (Inlet)', unit: 'm³/hr', min: 0, max: 50, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'flow' },
-    { id: `${prefix}-Totalizer`, mqttKey: isLiveOht ? 'EFM_1_2' : `${prefix}_TOT`, label: isLiveOht ? 'Totalizer' : 'Totalizer', unit: 'm³', min: isLiveOht ? -999999 : 0, max: 999999, section: 'oht', subsection: sub, type: 'totalizer', instrumentType: 'totalizer' },
+    { id: `${prefix}-PT`, mqttKey: 'PT', label: 'Pressure (PT)', unit: 'Bar', min: 0, max: 16, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'pt' },
+    { id: `${prefix}-LT`, mqttKey: 'LT', label: 'Level (LT)', unit: '%', min: 0, max: 100, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'lt' },
+    { id: `${prefix}-Flow-IN`, mqttKey: 'EFM_FLOW', label: 'Flow Meter (Inlet)', unit: 'm³/hr', min: 0, max: 150, section: 'oht', subsection: sub, type: 'analog', instrumentType: 'flow' },
+    { id: `${prefix}-Totalizer`, mqttKey: 'EFM_1_2', label: 'Totalizer', unit: 'm³', min: -999999, max: 999999, section: 'oht', subsection: sub, type: 'totalizer', instrumentType: 'totalizer' },
   ];
 };
 
@@ -131,10 +130,10 @@ const getEnv = (key: string): string | undefined => {
 export const DEFAULT_MQTT_TOPICS: Record<string, string> = {
   INTAKE: getEnv('VITE_MQTT_TOPIC_INTAKE') || getEnv('NEXT_PUBLIC_MQTT_TOPIC_INTAKE') || 'mohgaon/intake',
   WTP:    getEnv('VITE_MQTT_TOPIC_WTP') || getEnv('NEXT_PUBLIC_MQTT_TOPIC_WTP') || 'mohgaon/wtp',
-  OHT1:   getEnv('VITE_MQTT_TOPIC_OHT1') || getEnv('NEXT_PUBLIC_MQTT_TOPIC_OHT1') || 'OES/M7g4/Ov1h/8672x4Af',
+  OHT1:   getEnv('VITE_MQTT_TOPIC_OHT1') || getEnv('NEXT_PUBLIC_MQTT_TOPIC_OHT1') || 'mohgaon/oht-1',
   OHT2:   getEnv('VITE_MQTT_TOPIC_OHT2') || getEnv('NEXT_PUBLIC_MQTT_TOPIC_OHT2') || 'mohgaon/oht-2',
   OHT3:   getEnv('VITE_MQTT_TOPIC_OHT3') || getEnv('NEXT_PUBLIC_MQTT_TOPIC_OHT3') || 'mohgaon/oht-3',
-  OHT4:   getEnv('VITE_MQTT_TOPIC_OHT4') || getEnv('NEXT_PUBLIC_MQTT_TOPIC_OHT4') || 'OES/M7g4/Ov4h/8672x4Af',
+  OHT4:   getEnv('VITE_MQTT_TOPIC_OHT4') || getEnv('NEXT_PUBLIC_MQTT_TOPIC_OHT4') || 'mohgaon/oht-4',
 };
 
 // Mutable map — initialized with station defaults
@@ -204,7 +203,7 @@ export const VALID_OHT_KEYS = [
   'OHT3_LT', 'OHT3_FLOW', 'OHT3_TOT', 'OHT3_PT',
   'OHT4_LT', 'OHT4_FLOW', 'OHT4_TOT', 'OHT4_PT',
   'PT', 'PT_01', 'LT', 'LEVEL', 'Level', 'FLOW', 'Flow', 'FLOW_IN', 'TOTALIZER',
-  'EFM_FLOW', 'EFM_1_2'
+  'EFM_FLOW', 'EFM_FLOW_2', 'EFM_1_2', 'EFM_1_1', 'EFM_2_2'
 ];
 
 export const VALID_INTAKE_KEYS = [

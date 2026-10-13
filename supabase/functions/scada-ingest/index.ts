@@ -40,8 +40,14 @@ type ParsedMessage = {
 
 function normalizeSensorValue(sensor: Sensor, value: number): number | null {
   if (!Number.isFinite(value)) return null;
-  // If WTP inlet transmitter publishes Litres/hr (e.g., ~71000 L/hr), convert to m³/hr (~71.0 m³/hr)
-  if (sensor.id === "WTP-Flow-IN" && value > 1000 && value <= 200000) {
+
+  // Clean up floating point near-zero noise (e.g. -2.8e-17, 1.49e-5) from PLC Modbus
+  if (Math.abs(value) < 1e-4) {
+    value = 0;
+  }
+
+  // If flow transmitter publishes Litres/hr (e.g., ~71000 L/hr, ~61622 L/hr), convert to m³/hr (~71.0 m³/hr)
+  if ((sensor.instrumentType === "flow" || sensor.id.includes("Flow")) && value > 1000 && value <= 200000) {
     value = value / 1000;
   }
   if (value >= sensor.min && value <= sensor.max) return value;
@@ -58,21 +64,20 @@ function normalizeSensorValue(sensor: Sensor, value: number): number | null {
 const DEFAULT_TOPICS = {
   INTAKE: "mohgaon/intake",
   WTP: "mohgaon/wtp",
-  OHT1: "OES/M7g4/Ov1h/8672x4Af",
+  OHT1: "mohgaon/oht-1",
   OHT2: "mohgaon/oht-2",
   OHT3: "mohgaon/oht-3",
-  OHT4: "OES/M7g4/Ov4h/8672x4Af",
+  OHT4: "mohgaon/oht-4",
 };
 
 const ohtSensors = (n: number): Sensor[] => {
   const prefix = `OHT${n}`;
   const subsection = `OHT-${n}`;
-  const isLiveOht = n === 2 || n === 3;
   return [
-    { id: `${prefix}-PT`, mqttKey: isLiveOht ? "PT" : "PT_01", label: "Pressure (PT)", unit: "Bar", min: 0, max: isLiveOht ? 16 : 10, section: "oht", subsection, instrumentType: "pt" },
-    { id: `${prefix}-LT`, mqttKey: isLiveOht ? "LT" : "LEVEL", label: "Level (LT)", unit: "%", min: 0, max: 100, section: "oht", subsection, instrumentType: "lt" },
-    { id: `${prefix}-Flow-IN`, mqttKey: isLiveOht ? "EFM_FLOW" : "FLOW", label: "Flow Meter (Inlet)", unit: "m³/hr", min: 0, max: 50, section: "oht", subsection, instrumentType: "flow" },
-    { id: `${prefix}-Totalizer`, mqttKey: isLiveOht ? "EFM_1_2" : "TOTALIZER", label: isLiveOht ? "Totalizer" : "Totalizer", unit: "m³", min: isLiveOht ? -999999 : 0, max: 999999, section: "oht", subsection, instrumentType: "totalizer" },
+    { id: `${prefix}-PT`, mqttKey: "PT", label: "Pressure (PT)", unit: "Bar", min: 0, max: 16, section: "oht", subsection, instrumentType: "pt" },
+    { id: `${prefix}-LT`, mqttKey: "LT", label: "Level (LT)", unit: "%", min: 0, max: 100, section: "oht", subsection, instrumentType: "lt" },
+    { id: `${prefix}-Flow-IN`, mqttKey: "EFM_FLOW", label: "Flow Meter (Inlet)", unit: "m³/hr", min: 0, max: 150, section: "oht", subsection, instrumentType: "flow" },
+    { id: `${prefix}-Totalizer`, mqttKey: "EFM_1_2", label: "Totalizer", unit: "m³", min: -999999, max: 999999, section: "oht", subsection, instrumentType: "totalizer" },
   ];
 };
 
@@ -150,7 +155,11 @@ const MQTT_KEY_ALIASES: Record<string, string[]> = {
   "CWR_CL": ["CWR_CL", "CL"],
   "CWR_TB": ["CWR_TB", "CWR_TR", "TR", "CW_TR"],
   "CWR_TEM": ["CWR_TEM"],
-  // OHT keys with prefixed names
+  // OHT keys with canonical PLC tag names and aliases
+  "PT": ["PT", "PT_01", "OHT_PT"],
+  "LT": ["LT", "LEVEL", "Level", "OHT_LT"],
+  "EFM_FLOW": ["EFM_FLOW", "FLOW", "Flow", "FLOW_IN", "OHT_FLOW"],
+  "EFM_1_2": ["EFM_1_2", "TOTALIZER", "OHT_TOT"],
   "PT_01": ["PT_01", "PT"],
   "LEVEL": ["LEVEL", "Level", "LT"],
   "FLOW": ["FLOW", "Flow", "FLOW_IN"],
@@ -291,7 +300,7 @@ function topicSetup(cfg: MqttConfig | null) {
     topicToSection.set(path, key === 'INTAKE' ? { section: 'intake' } : key === 'WTP'
       ? { section: 'wtp' } : { section: 'oht', subsection: `OHT-${key.slice(3)}` });
   }
-  return { topics: [...topicToSection.keys()].filter(Boolean), topicToSection };
+  return { topics: [...new Set([...topicToSection.keys(), 'mohgaon/#'])].filter(Boolean), topicToSection };
 }
 
 function normalizeBrokerUrl(url: string | null | undefined): string {
@@ -350,9 +359,29 @@ async function collectSnapshot(
     client.on("message", (topic: string, payload: Buffer, packet: { retain?: boolean }) => {
       // Retained packets have no trustworthy acquisition timestamp in these RTUs.
       if (settled || packet.retain) return;
-      const mapped = topicToSection.get(topic) || { section: "unknown" as const };
+      let mapped = topicToSection.get(topic);
+      if (!mapped) {
+        const lower = topic.toLowerCase();
+        for (const [t, sec] of topicToSection.entries()) {
+          if (t.toLowerCase() === lower) { mapped = sec; break; }
+        }
+      }
+      const payloadStr = payload.toString();
+      if (!mapped) {
+        const lower = topic.toLowerCase();
+        if (lower.includes('oht-1') || lower.includes('oht1')) mapped = { section: 'oht', subsection: 'OHT-1' };
+        else if (lower.includes('oht-2') || lower.includes('oht2')) mapped = { section: 'oht', subsection: 'OHT-2' };
+        else if (lower.includes('oht-3') || lower.includes('oht3')) mapped = { section: 'oht', subsection: 'OHT-3' };
+        else if (lower.includes('oht-4') || lower.includes('oht4')) mapped = { section: 'oht', subsection: 'OHT-4' };
+        else if (lower.includes('intake')) mapped = { section: 'intake' };
+        else if (lower.includes('wtp')) mapped = { section: 'wtp' };
+        else if (payloadStr.includes('02500225110500009028')) mapped = { section: 'oht', subsection: 'OHT-1' };
+        else if (payloadStr.includes('02500225110500007237')) mapped = { section: 'oht', subsection: 'OHT-2' };
+        else if (payloadStr.includes('02500225110500009295')) mapped = { section: 'oht', subsection: 'OHT-3' };
+        else mapped = { section: "unknown" as const };
+      }
       const combined: Record<string, string | number> = {};
-      parsePayload(payload.toString()).forEach(part => Object.assign(combined, part));
+      parsePayload(payloadStr).forEach(part => Object.assign(combined, part));
       if (Object.keys(combined).length > 0) {
         const message = { topic, payload: combined, timestamp: new Date(), ...mapped };
         messages.push(message);
@@ -371,11 +400,32 @@ function mapReadings(msg: ParsedMessage) {
   if (msg.section === 'unknown') return [];
   const sensors = SENSORS.filter(s => s.section === msg.section && (!s.subsection || s.subsection === msg.subsection) && s.mqttKey);
   const rows = new Map<string, {tag_id: string; section: Section; value: number | null; quality: string; received_at: string; mqtt_topic: string}>();
-  for (const [key, raw] of Object.entries(msg.payload)) {
+
+  // For OHT payloads, resolve active flow tag between EFM_FLOW and EFM_FLOW_2
+  const currentPayload: Record<string, string | number> = { ...msg.payload };
+  if (msg.section === 'oht') {
+    const efmFlowNum = Number(currentPayload.EFM_FLOW);
+    const efmFlow2Num = Number(currentPayload.EFM_FLOW_2);
+    if (!isNaN(efmFlow2Num)) {
+      if (efmFlow2Num > 0) {
+        if (isNaN(efmFlowNum) || efmFlowNum <= 0.05 || efmFlowNum > 1000 || efmFlowNum < 0) {
+          currentPayload.EFM_FLOW = efmFlow2Num > 100 ? efmFlow2Num / 1000 : efmFlow2Num;
+        }
+      } else if (efmFlow2Num === 0 && (isNaN(efmFlowNum) || efmFlowNum < 0 || efmFlowNum > 1000 || Math.abs(efmFlowNum) < 1e-4)) {
+        currentPayload.EFM_FLOW = 0;
+      }
+    }
+    // Delete auxiliary channel registers so they don't overwrite primary instruments
+    delete currentPayload.EFM_FLOW_2;
+    delete currentPayload.EFM_2_1;
+    delete currentPayload.EFM_2_2;
+    delete currentPayload.EFM_1_1;
+  }
+
+  for (const [key, raw] of Object.entries(currentPayload)) {
     const sensor = sensors.find(s => mqttKeyMatches(s.mqttKey, key));
     if (!sensor) continue;
     let value = raw === '' || raw === null || typeof raw === 'boolean' ? NaN : Number(raw);
-    // WTP flow is already m³/hr; do not apply a litres-to-m³ conversion.
     const normalized = normalizeSensorValue(sensor, value);
     rows.set(sensor.id, {tag_id:sensor.id, section:sensor.section, value:normalized,
       quality:normalized === null ? 'fault' : 'good', received_at:msg.timestamp.toISOString(), mqtt_topic:msg.topic});

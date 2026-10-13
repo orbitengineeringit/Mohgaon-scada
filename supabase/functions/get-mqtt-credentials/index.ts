@@ -71,10 +71,10 @@ serve(async (req: Request) => {
     const topics = {
       INTAKE: Deno.env.get("MQTT_TOPIC_INTAKE") || "mohgaon/intake",
       WTP: Deno.env.get("MQTT_TOPIC_WTP") || "mohgaon/wtp",
-      OHT1: Deno.env.get("MQTT_TOPIC_OHT1") || "OES/M7g4/Ov1h/8672x4Af",
+      OHT1: Deno.env.get("MQTT_TOPIC_OHT1") || "mohgaon/oht-1",
       OHT2: Deno.env.get("MQTT_TOPIC_OHT2") || "mohgaon/oht-2",
       OHT3: Deno.env.get("MQTT_TOPIC_OHT3") || "mohgaon/oht-3",
-      OHT4: Deno.env.get("MQTT_TOPIC_OHT4") || "OES/M7g4/Ov4h/8672x4Af",
+      OHT4: Deno.env.get("MQTT_TOPIC_OHT4") || "mohgaon/oht-4",
     };
 
     return new Response(

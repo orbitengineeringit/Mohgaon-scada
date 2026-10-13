@@ -251,17 +251,18 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
       }
     }
 
-    if (topic.toLowerCase().includes('oht') || topic.includes('Ov1h') || topic.includes('Ov2h') || topic.includes('Ov3h') || topic.includes('Ov4h')) {
-      if (topic.includes('OHT01') || topic.includes('OHT-1') || topic.includes('OHT1') || topic.includes('Ov1h')) {
+    const lowerTopic = topic.toLowerCase();
+    if (lowerTopic.includes('oht') || topic.includes('Ov1h') || topic.includes('Ov2h') || topic.includes('Ov3h') || topic.includes('Ov4h')) {
+      if (lowerTopic.includes('oht-1') || lowerTopic.includes('oht1') || lowerTopic.includes('oht01') || topic.includes('Ov1h')) {
         return { section: 'oht', subsection: 'OHT-1' };
       }
-      if (topic.includes('OHT02') || topic.includes('OHT-2') || topic.includes('OHT2') || topic.toLowerCase().includes('oht-2') || topic.includes('Ov2h')) {
+      if (lowerTopic.includes('oht-2') || lowerTopic.includes('oht2') || lowerTopic.includes('oht02') || topic.includes('Ov2h')) {
         return { section: 'oht', subsection: 'OHT-2' };
       }
-      if (topic.includes('OHT03') || topic.includes('OHT-3') || topic.includes('OHT3') || topic.toLowerCase().includes('oht-3') || topic.includes('Ov3h')) {
+      if (lowerTopic.includes('oht-3') || lowerTopic.includes('oht3') || lowerTopic.includes('oht03') || topic.includes('Ov3h')) {
         return { section: 'oht', subsection: 'OHT-3' };
       }
-      if (topic.includes('OHT04') || topic.includes('OHT-4') || topic.includes('OHT4') || topic.includes('Ov4h')) {
+      if (lowerTopic.includes('oht-4') || lowerTopic.includes('oht4') || lowerTopic.includes('oht04') || topic.includes('Ov4h')) {
         return { section: 'oht', subsection: 'OHT-4' };
       }
       return { section: 'oht' };
@@ -274,10 +275,10 @@ export const MqttProvider: React.FC<{ children: ReactNode; onMessage?: (message:
     if (payloadStr) {
       if (payloadStr.includes('02500225110500008735') || payloadStr.includes('RLT') || payloadStr.includes('INTAKE_') || payloadStr.includes('INT_')) return { section: 'intake' };
       if (payloadStr.includes('02500225110500007666') || payloadStr.includes('RAW_PH') || payloadStr.includes('RAW_EFM') || payloadStr.includes('FLOWMETER') || payloadStr.includes('CWR_') || payloadStr.includes('BW_LT')) return { section: 'wtp' };
-      if (payloadStr.includes('OHT1_')) return { section: 'oht', subsection: 'OHT-1' };
-      if (payloadStr.includes('02500225110500007237') || payloadStr.includes('OHT2_')) return { section: 'oht', subsection: 'OHT-2' };
-      if (payloadStr.includes('OHT3_')) return { section: 'oht', subsection: 'OHT-3' };
-      if (payloadStr.includes('OHT4_')) return { section: 'oht', subsection: 'OHT-4' };
+      if (payloadStr.includes('02500225110500009028') || payloadStr.includes('OHT1_') || payloadStr.includes('oht-1')) return { section: 'oht', subsection: 'OHT-1' };
+      if (payloadStr.includes('02500225110500007237') || payloadStr.includes('OHT2_') || payloadStr.includes('oht-2')) return { section: 'oht', subsection: 'OHT-2' };
+      if (payloadStr.includes('02500225110500009295') || payloadStr.includes('OHT3_') || payloadStr.includes('oht-3')) return { section: 'oht', subsection: 'OHT-3' };
+      if (payloadStr.includes('OHT4_') || payloadStr.includes('oht-4')) return { section: 'oht', subsection: 'OHT-4' };
     }
 
     return { section: 'unknown' };

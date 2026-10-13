@@ -39,9 +39,9 @@ const VALID_RANGE: Record<string, { min: number; max: number }> = {
   "WTP-LT-BW": { min: 0, max: 100 }, "WTP-HeaderPT": { min: 0, max: 10 },
   "WTP-PT1": { min: 0, max: 10 }, "WTP-PT2": { min: 0, max: 10 },
   ...Object.fromEntries([1, 2, 3, 4].flatMap((n) => [
-    [`OHT${n}-PT`, { min: 0, max: (n === 2 || n === 3) ? 16 : 10 }],
+    [`OHT${n}-PT`, { min: 0, max: 16 }],
     [`OHT${n}-LT`, { min: 0, max: 100 }],
-    [`OHT${n}-Flow-IN`, { min: 0, max: 50 }],
+    [`OHT${n}-Flow-IN`, { min: 0, max: 150 }],
   ])),
 };
 
@@ -50,8 +50,12 @@ const isPercentageLevel = (id: string): boolean =>
 
 function normalizeReading(id: string, value: number): number | undefined {
   if (!Number.isFinite(value)) return undefined;
-  // If WTP inlet transmitter publishes Litres/hr (e.g., ~71000 L/hr), convert to m³/hr (~71.0 m³/hr)
-  if (id === "WTP-Flow-IN" && value > 1000 && value <= 200000) {
+  // Clean up floating point near-zero noise
+  if (Math.abs(value) < 1e-4) {
+    value = 0;
+  }
+  // If flow transmitter publishes Litres/hr, convert to m³/hr
+  if (id.includes("Flow") && value > 1000 && value <= 200000) {
     value = value / 1000;
   }
   const range = VALID_RANGE[id];

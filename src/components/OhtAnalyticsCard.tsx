@@ -65,7 +65,7 @@ const TankLevelBars: React.FC<{ tanks: TankData[] }> = memo(({ tanks }) => {
               {tank.label}
             </span>
             <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-popover text-popover-foreground text-[10px] px-2.5 py-1.5 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-20 border border-border backdrop-blur-sm transition-opacity duration-200">
-              {tank.level.toFixed(2)} m
+              {tank.level.toFixed(2)} %
             </div>
           </div>
         );
@@ -137,11 +137,8 @@ const OhtAnalyticsCard: React.FC = memo(() => {
   const { ohtTags } = useScada();
 
   const tankData: TankData[] = useMemo(() => {
-    const activePrefixes = Array.from(new Set(
-      ohtTags.filter(t => t.isActive).map(t => t.id.split('-')[0])
-    )).filter(p => p.startsWith('OHT'));
-
-    return activePrefixes.map(prefix => {
+    const prefixes = ['OHT1', 'OHT2', 'OHT3', 'OHT4'];
+    return prefixes.map(prefix => {
       const num = prefix.replace('OHT', '');
       const findVal = (key: string) => ohtTags.find(t => t.id === `${prefix}-${key}`)?.value ?? 0;
       return {
@@ -178,7 +175,7 @@ const OhtAnalyticsCard: React.FC = memo(() => {
             {[
               { label: 'Active Tanks', value: `${activeTanks}/4`, icon: Activity, color: 'success', active: activeTanks > 0 },
               { label: 'Total Flow', value: `${totalFlow.toFixed(1)}`, unit: 'm³/hr', icon: Waves, color: 'primary', active: totalFlow > 0 },
-              { label: 'Avg Level', value: `${avgLevel.toFixed(1)}`, unit: 'm', icon: Gauge, color: 'accent', active: avgLevel > 0 },
+              { label: 'Avg Level', value: `${avgLevel.toFixed(1)}`, unit: '%', icon: Gauge, color: 'accent', active: avgLevel > 0 },
             ].map((kpi, i) => (
               <div key={i} className={`rounded-2xl p-4 text-center relative overflow-hidden border-2 transition-colors ${
                 kpi.active 

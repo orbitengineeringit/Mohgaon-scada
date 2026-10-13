@@ -318,7 +318,28 @@ export const useMqttTagSync = (
     const latestValues = new Map<string, number>();
     tags.forEach(t => latestValues.set(t.id, t.value));
 
-    for (const [mqttKey, rawValue] of Object.entries(payload)) {
+    // For OHT payloads, resolve active flow tag between EFM_FLOW and EFM_FLOW_2
+    const currentPayload: Record<string, string | number> = { ...payload };
+    if (section === 'oht') {
+      const efmFlowNum = Number(currentPayload.EFM_FLOW);
+      const efmFlow2Num = Number(currentPayload.EFM_FLOW_2);
+      if (!isNaN(efmFlow2Num)) {
+        if (efmFlow2Num > 0) {
+          if (isNaN(efmFlowNum) || efmFlowNum <= 0.05 || efmFlowNum > 1000 || efmFlowNum < 0) {
+            currentPayload.EFM_FLOW = efmFlow2Num > 100 ? efmFlow2Num / 1000 : efmFlow2Num;
+          }
+        } else if (efmFlow2Num === 0 && (isNaN(efmFlowNum) || efmFlowNum < 0 || efmFlowNum > 1000 || Math.abs(efmFlowNum) < 1e-4)) {
+          currentPayload.EFM_FLOW = 0;
+        }
+      }
+      // Delete auxiliary channel registers so they don't overwrite primary instruments
+      delete currentPayload.EFM_FLOW_2;
+      delete currentPayload.EFM_2_1;
+      delete currentPayload.EFM_2_2;
+      delete currentPayload.EFM_1_1;
+    }
+
+    for (const [mqttKey, rawValue] of Object.entries(currentPayload)) {
       if (!validKeys.includes(mqttKey) && !validKeys.map(k => k.toUpperCase()).includes(mqttKey.toUpperCase())) continue;
 
       const value = typeof rawValue === 'string' ? parseFloat(rawValue) : rawValue;
@@ -328,6 +349,11 @@ export const useMqttTagSync = (
         s.mqttKey === mqttKey ||
         s.mqttKey.toUpperCase() === mqttKey.toUpperCase() ||
         // --- Legacy alias fallbacks (backward compatibility for older firmware or manual tests) ---
+        // OHT tag aliases
+        (mqttKey === 'EFM_FLOW' && s.instrumentType === 'flow') ||
+        (mqttKey === 'EFM_1_2' && s.instrumentType === 'totalizer') ||
+        (mqttKey === 'LT' && s.instrumentType === 'lt') ||
+        (mqttKey === 'PT' && s.instrumentType === 'pt') ||
         // Intake aliases
         (mqttKey === 'PT_01' && s.id === 'INT-PT1') ||
         (mqttKey === 'INTAKE_PT1' && s.id === 'INT-PT1') ||
@@ -497,7 +523,12 @@ export const useMqttTagSync = (
             const ohtNum = sensorId.match(/OHT(\d+)/)?.[1];
             if (ohtNum) {
               const flowIn = latestValues.get(`OHT${ohtNum}-Flow-IN`) || 0;
-              isFlowActive = flowIn > 2.0;
+              const flowTag = tags.find(t => t.id === `OHT${ohtNum}-Flow-IN`);
+              if (flowTag && (flowTag.status === 'fault' || flowTag.status === 'disconnected')) {
+                isFlowActive = true;
+              } else {
+                isFlowActive = flowIn > 0.5;
+              }
             }
           }
           

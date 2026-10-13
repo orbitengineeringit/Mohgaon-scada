@@ -22,6 +22,17 @@ export const normalizeTelemetryValue = (
   range: EngineeringRange,
 ): number | null => {
   if (!Number.isFinite(value)) return null;
+
+  // Clean up floating point near-zero noise (e.g. -2.8e-17, 1.49e-5) from PLC Modbus
+  if (Math.abs(value) < 1e-4) {
+    value = 0;
+  }
+
+  // Convert Litres/hr to m³/hr for flow transmitters publishing L/hr (e.g. 61622 L/hr -> 61.62 m³/hr)
+  if (range.instrumentType === 'flow' && value > 1000 && value <= 200000) {
+    value = value / 1000;
+  }
+
   if (value >= range.min && value <= range.max) return value;
 
   const isPercentagePosition = range.unit === '%' &&

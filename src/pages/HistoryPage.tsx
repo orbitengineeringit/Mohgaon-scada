@@ -911,14 +911,18 @@ const ExportProgressDialog: React.FC<{
   };
 
   return (
-    <Dialog open={state.open}>
-      <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <FileSpreadsheet className="h-5 w-5 text-emerald-500" />
-            Exporting Historical Data
+    <Dialog open={state.open} onOpenChange={(open) => { if (!open && onCancel) onCancel(); }}>
+      <DialogContent 
+        className="w-[calc(100vw-2rem)] sm:max-w-md overflow-hidden p-5 sm:p-6" 
+        onPointerDownOutside={(e) => e.preventDefault()} 
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
+        <DialogHeader className="min-w-0">
+          <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
+            <FileSpreadsheet className="h-5 w-5 text-emerald-500 shrink-0" />
+            <span className="truncate">Exporting Historical Data</span>
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs sm:text-sm truncate">
             {state.phase === 'preparing'
               ? 'Partitioning date range and loading sensor metadata…'
               : state.phase === 'fetching'
@@ -926,29 +930,29 @@ const ExportProgressDialog: React.FC<{
                 : `${state.deduplicatedCount.toLocaleString()} records processed`}
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3 pt-1">
-          <Progress value={displayPct} className="h-2" />
-          <div className="flex items-center justify-between text-xs">
-            <span className="font-medium text-foreground">{phaseLabel[state.phase]}</span>
-            <span className="font-mono text-muted-foreground">{displayPct}%</span>
+        <div className="space-y-3 pt-1 w-full min-w-0 overflow-hidden">
+          <Progress value={displayPct} className="h-2 w-full" />
+          <div className="flex items-center justify-between text-xs min-w-0">
+            <span className="font-medium text-foreground truncate pr-2">{phaseLabel[state.phase]}</span>
+            <span className="font-mono text-muted-foreground shrink-0">{displayPct}%</span>
           </div>
           {state.message && (
-            <p className="text-xs text-muted-foreground truncate font-mono">
+            <p className="text-xs text-muted-foreground truncate w-full min-w-0" title={state.message}>
               {state.message}
             </p>
           )}
-          <div className="grid grid-cols-2 gap-2 pt-1">
-            <div className="rounded-lg border border-border/40 bg-muted/30 p-2.5">
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Processed Records</div>
-              <div className="text-sm font-bold text-foreground mt-0.5">
+          <div className="grid grid-cols-2 gap-2 pt-1 w-full min-w-0">
+            <div className="rounded-lg border border-border/40 bg-muted/30 p-2.5 min-w-0 overflow-hidden">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Processed Records</div>
+              <div className="text-sm font-bold text-foreground mt-0.5 truncate">
                 {state.deduplicatedCount ? state.deduplicatedCount.toLocaleString() : '0'}
               </div>
             </div>
-            <div className="rounded-lg border border-border/40 bg-muted/30 p-2.5">
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+            <div className="rounded-lg border border-border/40 bg-muted/30 p-2.5 min-w-0 overflow-hidden">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold truncate">
                 {state.phase === 'done' ? 'Elapsed Time' : 'Est. Remaining'}
               </div>
-              <div className="text-sm font-bold text-foreground mt-0.5">
+              <div className="text-sm font-bold text-foreground mt-0.5 truncate">
                 {state.phase === 'done' ? formatSec(elapsedSec) : (state.estSec ? `~${formatSec(state.estSec)}` : '…')}
               </div>
             </div>
